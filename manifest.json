@@ -1,16 +1,11 @@
 {
+  "id": "/CoinLence/",
   "name": "CoinLence",
   "short_name": "CoinLence",
-  "description": "Premium offline-first personal finance tracker with PIN security, smart analytics, and monthly reports.",
   "start_url": "./index.html",
-  "scope": "./",
   "display": "standalone",
-  "orientation": "portrait",
-  "theme_color": "#0b1220",
   "background_color": "#0b1220",
-  "lang": "en",
-  "dir": "ltr",
-  "categories": ["finance", "productivity", "utilities"],
+  "theme_color": "#0b1220",
   "icons": [
     {
       "src": "assets/icon/icon-192.png",
@@ -23,6 +18,32 @@
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any maskable"
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "assets/icon/ss1.png",
+      "sizes": "1080x2400",
+      "type": "image/png",
+      "form_factor": "narrow"
+    },
+    {
+      "src": "assets/icon/ss2.png",
+      "sizes": "1080x2400",
+      "type": "image/png",
+      "form_factor": "narrow"
+    },
+    {
+      "src": "assets/icon/ss3.png",
+      "sizes": "1080x2400",
+      "type": "image/png",
+      "form_factor": "narrow"
+    },
+    {
+      "src": "assets/icon/ss4.png",
+      "sizes": "1080x2400",
+      "type": "image/png",
+      "form_factor": "narrow"
     }
   ]
 }
