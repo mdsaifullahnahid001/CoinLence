@@ -2,16 +2,18 @@
   "name": "CoinLence",
   "short_name": "CoinLence",
   "description": "Premium offline-first personal finance tracker with PIN security, smart analytics, and monthly reports.",
-  "id": "/",
+  "id": "com.coinlence.app",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
+  "display_override": ["window-controls-overlay", "standalone"],
   "orientation": "portrait",
   "theme_color": "#0b1220",
   "background_color": "#0b1220",
   "lang": "en",
   "dir": "ltr",
-  "categories": ["finance", "productivity", "utilities"],
+  "categories": ["finance", "productivity"],
+  "iarc_rating_id": "e58c174a-13bb-4673-90d5-0955944f6f71",
   "icons": [
     {
       "src": "assets/icon/icon-192.png",
@@ -67,5 +69,14 @@
       "form_factor": "narrow",
       "label": "Settings & Security"
     }
-  ]
+  ],
+  "shortcuts": [
+    {
+      "name": "Add Transaction",
+      "short_name": "Add",
+      "url": "./index.html#add",
+      "icons": [{ "src": "assets/icon/icon-192.png", "sizes": "192x192" }]
+    }
+  ],
+  "prefer_related_applications": false
 }
