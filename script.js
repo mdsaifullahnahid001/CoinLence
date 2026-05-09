@@ -288,7 +288,9 @@ async function deleteCategory(id) {
    TRANSACTIONS
 =========================================================== */
 async function loadTransactions() {
-  state.transactions = await dbGetAll(STORES.TX);
+  const raw = await dbGetAll(STORES.TX);
+  // Normalize: ensure isSettled exists (backward compat with old transactions)
+  state.transactions = raw.map(t => ({ ...t, isSettled: t.isSettled || false }));
   state.transactions.sort((a,b) => b.date.localeCompare(a.date) || b.createdAt - a.createdAt);
 }
 
@@ -303,7 +305,8 @@ async function addTransaction(data) {
     notes: (data.notes||'').trim(),
     date: data.date,
     createdAt: Date.now(),
-    updatedAt: Date.now()
+    updatedAt: Date.now(),
+    isSettled: false
   };
   await dbPut(STORES.TX, tx);
   state.transactions.unshift(tx);
@@ -323,7 +326,8 @@ async function updateTransaction(id, data) {
     category: data.category,
     notes: (data.notes||'').trim(),
     date: data.date,
-    updatedAt: Date.now()
+    updatedAt: Date.now(),
+    isSettled: state.transactions[idx].isSettled || false
   };
   await dbPut(STORES.TX, upd);
   state.transactions[idx] = upd;
@@ -334,6 +338,20 @@ async function updateTransaction(id, data) {
 async function deleteTransaction(id) {
   await dbDelete(STORES.TX, id);
   state.transactions = state.transactions.filter(t => t.id !== id);
+}
+
+async function settleTransaction(id) {
+  const idx = state.transactions.findIndex(t => t.id === id);
+  if (idx < 0) { toast('Transaction not found', 'error'); return; }
+  const t = state.transactions[idx];
+  if (t.isSettled) { toast('Already settled', 'info'); return; }
+  const upd = { ...t, isSettled: true, updatedAt: Date.now() };
+  await dbPut(STORES.TX, upd);
+  state.transactions[idx] = upd;
+  const label = t.type === 'lend' ? 'Lend settled — amount returned to balance' : 'Borrow settled — amount deducted from balance';
+  toast(label, 'success');
+  renderAll();
+  if ($('#view-analytics').classList.contains('active')) drawAllAnalytics();
 }
 
 function validateTx(data) {
@@ -350,13 +368,24 @@ function validateTx(data) {
 =========================================================== */
 function computeTotals(txs = state.transactions) {
   let income = 0, expense = 0, lend = 0, borrow = 0;
+  let lendUnsettled = 0, borrowUnsettled = 0;
   for (const t of txs) {
+    const settled = t.isSettled === true;
     if (t.type === 'income') income += t.amount;
     else if (t.type === 'expense') expense += t.amount;
-    else if (t.type === 'lend') lend += t.amount;
-    else if (t.type === 'borrow') borrow += t.amount;
+    else if (t.type === 'lend') {
+      lend += t.amount;
+      if (!settled) lendUnsettled += t.amount;
+    }
+    else if (t.type === 'borrow') {
+      borrow += t.amount;
+      if (!settled) borrowUnsettled += t.amount;
+    }
   }
-  const balance = (income + borrow) - (expense + lend);
+  // Balance uses unsettled lend/borrow only:
+  // Lend settled → money returned, no longer subtracted.
+  // Borrow settled → money repaid, no longer added.
+  const balance = (income + borrowUnsettled) - (expense + lendUnsettled);
   return {
     income: safeNum(income),
     expense: safeNum(expense),
@@ -655,7 +684,8 @@ function renderTxList(container, txs) {
   }
   for (const t of txs) {
     const el = document.createElement('div');
-    el.className = 'tx-item';
+    const isLendBorrow = (t.type === 'lend' || t.type === 'borrow');
+    el.className = 'tx-item' + (t.isSettled ? ' settled-item' : '');
     el.dataset.id = t.id;
     const sign = (t.type === 'income' || t.type === 'borrow') ? '+' : '−';
     const amtClass =
@@ -663,17 +693,49 @@ function renderTxList(container, txs) {
       t.type === 'expense' ? 'neg' :
       t.type === 'lend' ? 'lend' : 'borrow';
     const icon = t.type === 'income' ? '↓' : t.type === 'expense' ? '↑' : t.type === 'lend' ? '↗' : '↘';
+
+    let settlePart = '';
+    if (isLendBorrow) {
+      if (!t.isSettled) {
+        settlePart = `<button class="settle-btn" data-id="${escapeHtml(t.id)}" title="Mark as Settled">✅</button>`;
+      } else {
+        settlePart = `<span class="settled-badge">✅ Settled</span>`;
+      }
+    }
+
     el.innerHTML = `
       <div class="tx-icon ${t.type}">${icon}</div>
       <div class="tx-info">
         <div class="tx-title">${escapeHtml(t.title)}</div>
         <div class="tx-meta">${escapeHtml(t.category)} • ${formatDateLabel(t.date)}</div>
       </div>
-      <div class="tx-amount ${amtClass}">${sign}${fmtMoney(t.amount).replace(CURRENCY,CURRENCY)}</div>
+      <div class="tx-right">
+        <div class="tx-amount ${amtClass}">${sign}${fmtMoney(t.amount).replace(CURRENCY,CURRENCY)}</div>
+        ${settlePart}
+      </div>
     `;
-    el.addEventListener('click', () => openTxModal(t));
+    el.addEventListener('click', (e) => {
+      if (e.target.closest('.settle-btn')) return;
+      openTxModal(t);
+    });
     container.appendChild(el);
   }
+
+  // Wire up settle buttons
+  container.querySelectorAll('.settle-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const id = btn.dataset.id;
+      const tx = state.transactions.find(t => t.id === id);
+      if (!tx) return;
+      const msg = tx.type === 'lend'
+        ? 'Mark as settled? The lent amount will be returned to your balance.'
+        : 'Mark as settled? The borrowed amount will be deducted from your balance.';
+      confirmAction('Settle transaction?', msg, async () => {
+        await settleTransaction(id);
+      });
+    });
+  });
 }
 
 function escapeHtml(s) {
