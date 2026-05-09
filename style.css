@@ -1,519 +1,1446 @@
-/* ===== Reset & Base ===== */
-* { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
-html, body { height: 100%; }
-body {
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-  background: var(--bg);
-  color: var(--text);
-  overflow-x: hidden;
-  transition: background 0.3s ease, color 0.3s ease;
-  font-size: 15px;
-  line-height: 1.45;
+/* =============================================================
+   CoinLence v2.0 — script.js
+   Premium offline-first PWA personal finance tracker
+   ============================================================= */
+
+(() => {
+'use strict';
+
+/* ===========================================================
+   CONSTANTS & STATE
+=========================================================== */
+const DB_NAME = 'coinlence_db';
+const DB_VERSION = 1;
+const STORES = {
+  TX: 'transactions',
+  CATS: 'categories',
+  META: 'meta'
+};
+const CURRENCY = '৳';
+const DEFAULT_CATEGORIES = ['Food','Transport','Shopping','Bills','Education','Salary','Business','Other'];
+const BACKUP_REMINDER_DAYS = 30;
+
+let db = null;
+let useFallback = false;
+let state = {
+  transactions: [],
+  categories: [],
+  settings: {
+    theme: 'dark',
+    pinHash: null,
+    pinLength: 4,
+    recoveryHash: null,
+    lastBackupPrompt: 0,
+    failedAttempts: 0,
+    lockUntil: 0
+  }
+};
+let confirmCallback = null;
+let lockTimer = null;
+
+/* ===========================================================
+   UTILITIES
+=========================================================== */
+const $ = (s, ctx=document) => ctx.querySelector(s);
+const $$ = (s, ctx=document) => Array.from(ctx.querySelectorAll(s));
+
+function uid() {
+  return Date.now().toString(36) + Math.random().toString(36).slice(2,9);
 }
 
-/* ===== Theme Variables ===== */
-body[data-theme="dark"] {
-  --bg: #0b1220;
-  --bg-elev: #121a2c;
-  --bg-elev-2: #1a2440;
-  --text: #e9eef7;
-  --muted: #8a93a6;
-  --border: #1f2940;
-  --primary: #5b8cff;
-  --primary-2: #7aa2ff;
-  --success: #2ecc71;
-  --danger: #ff5c5c;
-  --warning: #ffb547;
-  --lend: #ffb547;
-  --borrow: #a17bff;
-  --shadow: 0 10px 30px rgba(0,0,0,0.45);
-  --gradient: linear-gradient(135deg, #5b8cff 0%, #a17bff 100%);
-}
-body[data-theme="light"] {
-  --bg: #f4f6fb;
-  --bg-elev: #ffffff;
-  --bg-elev-2: #eef2f9;
-  --text: #1a2238;
-  --muted: #5b6478;
-  --border: #e3e8f0;
-  --primary: #3a6dff;
-  --primary-2: #5b8cff;
-  --success: #1e9e58;
-  --danger: #e23b3b;
-  --warning: #d98a16;
-  --lend: #d98a16;
-  --borrow: #6f4cd1;
-  --shadow: 0 10px 30px rgba(20,30,60,0.08);
-  --gradient: linear-gradient(135deg, #3a6dff 0%, #6f4cd1 100%);
+function fmtMoney(n) {
+  const v = Number(n) || 0;
+  return CURRENCY + v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
-/* ===== Utility ===== */
-.hidden { display: none !important; }
-.muted { color: var(--muted); font-size: 0.85rem; }
-.error-text { color: var(--danger); font-size: 0.85rem; min-height: 1.1em; margin: 6px 0; }
-.row-flex { display: flex; gap: 10px; align-items: center; }
-
-/* ===== Splash ===== */
-.splash {
-  position: fixed; inset: 0; z-index: 9999;
-  background: var(--bg);
-  display: flex; flex-direction: column; align-items: center; justify-content: center;
-  animation: fadeIn 0.3s ease;
-}
-.splash-logo {
-  width: 96px; height: 96px; border-radius: 28px;
-  background: var(--gradient);
-  display: flex; align-items: center; justify-content: center;
-  font-size: 52px; font-weight: 800; color: #fff;
-  box-shadow: var(--shadow);
-  animation: pulseLogo 1.4s ease infinite;
-}
-.splash h1 { margin-top: 18px; font-size: 1.8rem; letter-spacing: 0.5px; }
-.splash p { color: var(--muted); margin-top: 6px; }
-
-@keyframes pulseLogo {
-  0%,100% { transform: scale(1); }
-  50% { transform: scale(1.06); }
-}
-@keyframes fadeIn { from { opacity: 0 } to { opacity: 1 } }
-
-/* ===== Auth Screens ===== */
-.auth-screen {
-  position: fixed; inset: 0; z-index: 1000;
-  background: var(--bg);
-  display: flex; align-items: center; justify-content: center;
-  padding: 20px;
-  animation: fadeIn 0.3s ease;
-}
-.auth-card {
-  width: 100%; max-width: 420px;
-  background: var(--bg-elev);
-  border-radius: 20px;
-  padding: 28px 22px;
-  box-shadow: var(--shadow);
-  border: 1px solid var(--border);
-}
-.auth-logo {
-  width: 72px; height: 72px; border-radius: 22px;
-  background: var(--gradient);
-  display: flex; align-items: center; justify-content: center;
-  font-size: 36px; font-weight: 800; color: #fff;
-  margin: 0 auto 14px;
-}
-.auth-card h2 { text-align: center; margin-bottom: 6px; }
-.auth-card .muted { text-align: center; display: block; margin-bottom: 18px; }
-
-.pin-dots { display: flex; gap: 12px; justify-content: center; margin: 14px 0 8px; }
-.pin-dots span {
-  width: 14px; height: 14px; border-radius: 50%;
-  background: var(--bg-elev-2); border: 1px solid var(--border);
-  transition: all 0.2s ease;
-}
-.pin-dots span.filled { background: var(--primary); border-color: var(--primary); transform: scale(1.15); }
-
-.pin-input {
-  text-align: center; letter-spacing: 12px; font-size: 1.3rem;
+function safeNum(v) {
+  const n = parseFloat(v);
+  if (isNaN(n) || !isFinite(n)) return 0;
+  return Math.round(n * 100) / 100;
 }
 
-/* ===== Forms ===== */
-.form-group { margin-bottom: 14px; }
-.form-group label { display: block; font-size: 0.85rem; color: var(--muted); margin-bottom: 6px; font-weight: 500; }
-input, select, textarea {
-  width: 100%;
-  background: var(--bg-elev-2);
-  border: 1px solid var(--border);
-  color: var(--text);
-  padding: 12px 14px;
-  border-radius: 12px;
-  font-size: 1rem;
-  font-family: inherit;
-  outline: none;
-  transition: border 0.2s ease, box-shadow 0.2s ease;
-}
-input:focus, select:focus, textarea:focus {
-  border-color: var(--primary);
-  box-shadow: 0 0 0 3px rgba(91,140,255,0.18);
-}
-textarea { resize: vertical; }
-
-/* ===== Buttons ===== */
-.btn {
-  display: inline-block;
-  padding: 12px 18px;
-  border: none;
-  border-radius: 12px;
-  background: var(--bg-elev-2);
-  color: var(--text);
-  font-size: 0.95rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: transform 0.15s ease, opacity 0.15s ease, background 0.2s ease;
-  font-family: inherit;
-}
-.btn:active { transform: scale(0.97); }
-.btn-primary { background: var(--gradient); color: #fff; }
-.btn-danger { background: var(--danger); color: #fff; }
-.btn-ghost { background: transparent; border: 1px solid var(--border); }
-.btn-block { display: block; width: 100%; margin-top: 8px; }
-
-.icon-btn {
-  width: 38px; height: 38px;
-  border-radius: 10px; border: none;
-  background: var(--bg-elev-2); color: var(--text);
-  font-size: 1rem; cursor: pointer;
-  display: inline-flex; align-items: center; justify-content: center;
-  transition: background 0.2s;
-}
-.icon-btn:hover { background: var(--border); }
-
-.link-btn {
-  background: transparent; border: none; color: var(--primary);
-  font-size: 0.85rem; cursor: pointer; font-weight: 600;
+function todayISO() {
+  const d = new Date();
+  const m = String(d.getMonth()+1).padStart(2,'0');
+  const day = String(d.getDate()).padStart(2,'0');
+  return `${d.getFullYear()}-${m}-${day}`;
 }
 
-/* Pills */
-.pill-group { display: flex; gap: 8px; flex-wrap: wrap; background: var(--bg-elev-2); padding: 4px; border-radius: 12px; }
-.pill {
-  flex: 1; min-width: 70px;
-  padding: 10px 12px;
-  background: transparent;
-  border: none;
-  color: var(--muted);
-  font-weight: 600; font-size: 0.85rem;
-  border-radius: 9px;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  font-family: inherit;
-}
-.pill.active { background: var(--gradient); color: #fff; box-shadow: 0 4px 12px rgba(91,140,255,0.3); }
-
-/* ===== App Layout ===== */
-#app { padding-bottom: 100px; min-height: 100vh; }
-
-.app-header {
-  position: sticky; top: 0; z-index: 50;
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 14px 16px;
-  background: var(--bg);
-  border-bottom: 1px solid var(--border);
-  backdrop-filter: blur(10px);
-}
-.brand { display: flex; align-items: center; gap: 10px; }
-.brand-mark {
-  width: 36px; height: 36px; border-radius: 10px;
-  background: var(--gradient);
-  display: flex; align-items: center; justify-content: center;
-  font-size: 20px; font-weight: 800; color: #fff;
-}
-.brand-name { font-weight: 700; font-size: 1.05rem; letter-spacing: 0.3px; }
-.header-actions { display: flex; gap: 8px; }
-
-/* Views */
-.view { display: none; padding: 16px; animation: fadeUp 0.3s ease; }
-.view.active { display: block; }
-.view-title { font-size: 1.3rem; margin-bottom: 14px; font-weight: 700; }
-
-@keyframes fadeUp {
-  from { opacity: 0; transform: translateY(8px); }
-  to { opacity: 1; transform: translateY(0); }
+function parseDate(iso) {
+  return new Date(iso + 'T00:00:00');
 }
 
-/* Balance card */
-.balance-card {
-  background: var(--gradient);
-  color: #fff;
-  border-radius: 20px;
-  padding: 22px;
-  box-shadow: var(--shadow);
-  margin-bottom: 14px;
-  position: relative; overflow: hidden;
-}
-.balance-card::before {
-  content: ''; position: absolute; top: -50px; right: -50px;
-  width: 180px; height: 180px; border-radius: 50%;
-  background: rgba(255,255,255,0.08);
-}
-.balance-card.negative { background: linear-gradient(135deg, #e23b3b 0%, #ff7676 100%); }
-.bc-label { font-size: 0.85rem; opacity: 0.85; }
-.bc-amount { font-size: 2.1rem; font-weight: 800; margin: 4px 0 16px; letter-spacing: 0.3px; }
-.bc-row { display: flex; gap: 10px; margin-top: 10px; }
-.bc-row > div { flex: 1; background: rgba(255,255,255,0.12); padding: 10px 12px; border-radius: 12px; }
-.bc-row span { font-size: 0.75rem; opacity: 0.85; display: block; }
-.bc-row strong { font-size: 0.95rem; font-weight: 700; }
-
-/* Quick actions */
-.quick-actions {
-  display: grid; grid-template-columns: repeat(4,1fr);
-  gap: 8px; margin: 14px 0;
-}
-.qa {
-  padding: 12px 6px;
-  border-radius: 14px;
-  border: 1px solid var(--border);
-  background: var(--bg-elev);
-  color: var(--text);
-  font-weight: 600; font-size: 0.8rem;
-  cursor: pointer;
-  transition: transform 0.15s, background 0.2s;
-}
-.qa:active { transform: scale(0.96); }
-.qa-income { color: var(--success); }
-.qa-expense { color: var(--danger); }
-.qa-lend { color: var(--lend); }
-.qa-borrow { color: var(--borrow); }
-
-/* Sections */
-.section-title {
-  display: flex; align-items: center; justify-content: space-between;
-  margin: 18px 0 10px;
-}
-.section-title h3 { font-size: 1rem; font-weight: 700; }
-.section-title span { font-size: 0.8rem; color: var(--muted); }
-
-/* Card */
-.card {
-  background: var(--bg-elev);
-  border: 1px solid var(--border);
-  border-radius: 16px;
-  padding: 14px;
-  margin-bottom: 12px;
-}
-.chart-card h4 { font-size: 0.95rem; margin-bottom: 10px; font-weight: 700; }
-.chart-card canvas { width: 100%; height: 220px; display: block; }
-
-/* Tx List */
-.tx-list { display: flex; flex-direction: column; gap: 8px; }
-.tx-item {
-  display: flex; align-items: center; gap: 12px;
-  background: var(--bg-elev);
-  border: 1px solid var(--border);
-  border-radius: 14px;
-  padding: 12px;
-  cursor: pointer;
-  transition: transform 0.15s ease, background 0.2s ease;
-}
-.tx-item:active { transform: scale(0.98); }
-.tx-icon {
-  width: 42px; height: 42px; border-radius: 12px;
-  display: flex; align-items: center; justify-content: center;
-  font-size: 18px; font-weight: 700; flex-shrink: 0;
-  color: #fff;
-}
-.tx-icon.income { background: var(--success); }
-.tx-icon.expense { background: var(--danger); }
-.tx-icon.lend { background: var(--lend); }
-.tx-icon.borrow { background: var(--borrow); }
-.tx-info { flex: 1; min-width: 0; }
-.tx-title { font-weight: 600; font-size: 0.95rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.tx-meta { font-size: 0.75rem; color: var(--muted); margin-top: 2px; }
-.tx-amount { font-weight: 700; font-size: 0.95rem; flex-shrink: 0; text-align: right; }
-.tx-amount.pos { color: var(--success); }
-.tx-amount.neg { color: var(--danger); }
-.tx-amount.lend { color: var(--lend); }
-.tx-amount.borrow { color: var(--borrow); }
-
-.empty {
-  text-align: center; padding: 30px 10px;
-  color: var(--muted); font-size: 0.9rem;
+function monthKey(iso) {
+  return iso.slice(0,7); // YYYY-MM
 }
 
-/* Filters */
-.filters { margin-bottom: 14px; }
-.filter-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-top: 8px; }
-
-/* Settings */
-.settings-card h4 { margin-bottom: 12px; font-size: 1rem; }
-.setting-row {
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 8px 0;
-}
-.switch { position: relative; display: inline-block; width: 46px; height: 26px; }
-.switch input { opacity: 0; width: 0; height: 0; }
-.slider {
-  position: absolute; cursor: pointer; inset: 0;
-  background: var(--bg-elev-2); border: 1px solid var(--border);
-  border-radius: 26px; transition: 0.25s;
-}
-.slider::before {
-  content: ''; position: absolute;
-  height: 20px; width: 20px; left: 2px; top: 2px;
-  background: var(--text);
-  border-radius: 50%; transition: 0.25s;
-}
-.switch input:checked + .slider { background: var(--gradient); border-color: transparent; }
-.switch input:checked + .slider::before { transform: translateX(20px); background: #fff; }
-
-.chip-list { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
-.chip {
-  background: var(--bg-elev-2);
-  padding: 6px 10px;
-  border-radius: 20px;
-  font-size: 0.8rem;
-  display: inline-flex; align-items: center; gap: 6px;
-  border: 1px solid var(--border);
-}
-.chip button {
-  border: none; background: transparent; color: var(--danger);
-  font-size: 0.85rem; cursor: pointer;
+function monthName(idx) {
+  return ['January','February','March','April','May','June','July','August','September','October','November','December'][idx];
 }
 
-/* Bottom nav */
-.bottom-nav {
-  position: fixed; bottom: 0; left: 0; right: 0;
-  display: flex; justify-content: space-around;
-  background: var(--bg-elev);
-  border-top: 1px solid var(--border);
-  padding: 8px 6px calc(8px + env(safe-area-inset-bottom));
-  z-index: 50;
+/* Base64 encode/decode (UTF-8 safe) */
+function b64Encode(str) {
+  try { return btoa(unescape(encodeURIComponent(str))); }
+  catch(e) { return btoa(str); }
 }
-.nav-btn {
-  flex: 1; background: transparent; border: none;
-  color: var(--muted); cursor: pointer;
-  display: flex; flex-direction: column; align-items: center; gap: 2px;
-  font-size: 0.7rem; padding: 6px;
-  transition: color 0.2s;
-  font-family: inherit;
-}
-.nav-btn span { font-size: 1.25rem; }
-.nav-btn.active { color: var(--primary); }
-.nav-btn.fab {
-  background: var(--gradient); color: #fff; border-radius: 50%;
-  width: 56px; height: 56px; flex: 0 0 56px;
-  margin-top: -22px;
-  box-shadow: 0 8px 22px rgba(91,140,255,0.4);
-  font-weight: 800;
-}
-.nav-btn.fab span { font-size: 1.6rem; }
-
-/* Modals */
-.modal-backdrop {
-  position: fixed; inset: 0; z-index: 1000;
-  background: rgba(0,0,0,0.55);
-  display: flex; align-items: flex-end; justify-content: center;
-  padding: 0;
-  animation: fadeIn 0.2s ease;
-}
-.modal {
-  background: var(--bg-elev);
-  width: 100%; max-width: 520px;
-  border-radius: 20px 20px 0 0;
-  box-shadow: var(--shadow);
-  max-height: 92vh;
-  overflow-y: auto;
-  animation: slideUp 0.25s ease;
-}
-.modal.modal-sm { max-width: 420px; border-radius: 18px; margin-bottom: auto; margin-top: auto; }
-@media (min-width: 600px) {
-  .modal-backdrop { align-items: center; padding: 20px; }
-  .modal { border-radius: 18px; }
-}
-@keyframes slideUp {
-  from { transform: translateY(40px); opacity: 0; }
-  to { transform: translateY(0); opacity: 1; }
-}
-.modal-header {
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 16px 18px; border-bottom: 1px solid var(--border);
-}
-.modal-header h3 { font-size: 1.05rem; font-weight: 700; }
-.modal-body { padding: 16px 18px; }
-
-/* Toasts */
-.toast-container {
-  position: fixed; bottom: 92px; left: 0; right: 0;
-  display: flex; flex-direction: column; align-items: center; gap: 8px;
-  pointer-events: none;
-  z-index: 2000;
-  padding: 0 16px;
-}
-.toast {
-  background: var(--bg-elev-2);
-  color: var(--text);
-  padding: 12px 18px;
-  border-radius: 12px;
-  border: 1px solid var(--border);
-  box-shadow: var(--shadow);
-  font-size: 0.9rem;
-  font-weight: 600;
-  display: flex; align-items: center; gap: 8px;
-  animation: toastIn 0.25s ease forwards;
-  pointer-events: auto;
-  max-width: 90%;
-}
-.toast.success { border-left: 4px solid var(--success); }
-.toast.error { border-left: 4px solid var(--danger); }
-.toast.info { border-left: 4px solid var(--primary); }
-.toast.warning { border-left: 4px solid var(--warning); }
-.toast.hide { animation: toastOut 0.25s ease forwards; }
-@keyframes toastIn {
-  from { transform: translateY(20px); opacity: 0; }
-  to { transform: translateY(0); opacity: 1; }
-}
-@keyframes toastOut {
-  from { transform: translateY(0); opacity: 1; }
-  to { transform: translateY(20px); opacity: 0; }
+function b64Decode(str) {
+  try { return decodeURIComponent(escape(atob(str))); }
+  catch(e) {
+    try { return atob(str); } catch(_) { return null; }
+  }
 }
 
-/* Responsive */
-@media (min-width: 720px) {
-  .view { max-width: 720px; margin: 0 auto; }
-  .app-header { max-width: 720px; margin: 0 auto; }
-}
-@media (min-width: 1024px) {
-  .quick-actions { grid-template-columns: repeat(4,1fr); }
-  .chart-card canvas { height: 260px; }
-}
-
-/* ===== Settlement ===== */
-.tx-right {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 5px;
-  flex-shrink: 0;
+/* Simple hash (SHA-256 via SubtleCrypto) */
+async function sha256(text) {
+  if (window.crypto && crypto.subtle) {
+    const enc = new TextEncoder().encode(text);
+    const buf = await crypto.subtle.digest('SHA-256', enc);
+    return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2,'0')).join('');
+  }
+  // Fallback (lightweight; not cryptographic)
+  let h = 0;
+  for (let i=0; i<text.length; i++) {
+    h = (Math.imul(31,h) + text.charCodeAt(i)) | 0;
+  }
+  return 'fb_' + (h>>>0).toString(16);
 }
 
-.settle-btn {
-  background: transparent;
-  border: 1px solid rgba(91,140,255,0.35);
-  border-radius: 8px;
-  padding: 3px 8px;
-  font-size: 0.78rem;
-  cursor: pointer;
-  color: var(--primary);
-  font-weight: 600;
-  font-family: inherit;
-  line-height: 1.4;
-  transition: background 0.18s ease, box-shadow 0.18s ease, transform 0.13s ease, border-color 0.18s ease;
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
-  white-space: nowrap;
-}
-.settle-btn:hover {
-  background: rgba(91,140,255,0.12);
-  border-color: var(--primary);
-  box-shadow: 0 0 10px rgba(91,140,255,0.45), 0 0 3px rgba(161,123,255,0.3);
-  transform: scale(1.04);
-}
-.settle-btn:active {
-  transform: scale(0.97);
-  box-shadow: none;
-}
-
-.settled-badge {
-  font-size: 0.72rem;
-  color: var(--success);
-  font-weight: 600;
-  opacity: 0.85;
-  letter-spacing: 0.2px;
+/* ===========================================================
+   STORAGE: IndexedDB primary, localStorage fallback
+=========================================================== */
+function openDB() {
+  return new Promise((resolve, reject) => {
+    if (!('indexedDB' in window)) { reject(new Error('No IndexedDB')); return; }
+    const req = indexedDB.open(DB_NAME, DB_VERSION);
+    req.onupgradeneeded = (e) => {
+      const _db = e.target.result;
+      if (!_db.objectStoreNames.contains(STORES.TX)) {
+        const txs = _db.createObjectStore(STORES.TX, { keyPath: 'id' });
+        txs.createIndex('date','date',{unique:false});
+        txs.createIndex('type','type',{unique:false});
+      }
+      if (!_db.objectStoreNames.contains(STORES.CATS)) {
+        _db.createObjectStore(STORES.CATS, { keyPath: 'id' });
+      }
+      if (!_db.objectStoreNames.contains(STORES.META)) {
+        _db.createObjectStore(STORES.META, { keyPath: 'key' });
+      }
+    };
+    req.onsuccess = (e) => resolve(e.target.result);
+    req.onerror = (e) => reject(e.target.error);
+  });
 }
 
-.settled-item {
-  opacity: 0.52;
-  filter: grayscale(0.65);
-  pointer-events: auto; /* allow click to view/edit */
+async function dbInit() {
+  try {
+    db = await openDB();
+    useFallback = false;
+  } catch(err) {
+    console.warn('IndexedDB unavailable, using localStorage fallback', err);
+    useFallback = true;
+  }
 }
-.settled-item .settle-btn {
-  pointer-events: none;
-  display: none;
+
+function lsKey(store) { return `coinlence_${store}`; }
+
+async function dbGetAll(store) {
+  if (useFallback) {
+    try {
+      const raw = localStorage.getItem(lsKey(store));
+      if (!raw) return [];
+      const decoded = b64Decode(raw);
+      if (!decoded) return [];
+      const arr = JSON.parse(decoded);
+      return Array.isArray(arr) ? arr : [];
+    } catch(e) { return []; }
+  }
+  return new Promise((resolve, reject) => {
+    try {
+      const tx = db.transaction(store, 'readonly');
+      const os = tx.objectStore(store);
+      const req = os.getAll();
+      req.onsuccess = () => {
+        const items = (req.result || []).map(rec => {
+          if (rec && rec._b64) {
+            const dec = b64Decode(rec._b64);
+            try { return dec ? JSON.parse(dec) : null; } catch(e) { return null; }
+          }
+          return rec;
+        }).filter(Boolean);
+        resolve(items);
+      };
+      req.onerror = () => reject(req.error);
+    } catch(err) { reject(err); }
+  });
 }
+
+async function dbPut(store, obj) {
+  if (useFallback) {
+    const all = await dbGetAll(store);
+    const idx = all.findIndex(x => x.id === obj.id || x.key === obj.key);
+    if (idx >= 0) all[idx] = obj; else all.push(obj);
+    localStorage.setItem(lsKey(store), b64Encode(JSON.stringify(all)));
+    return true;
+  }
+  return new Promise((resolve, reject) => {
+    try {
+      const tx = db.transaction(store, 'readwrite');
+      const os = tx.objectStore(store);
+      const keyName = os.keyPath;
+      const wrapped = { [keyName]: obj[keyName], _b64: b64Encode(JSON.stringify(obj)) };
+      const req = os.put(wrapped);
+      req.onsuccess = () => resolve(true);
+      req.onerror = () => reject(req.error);
+    } catch(err) { reject(err); }
+  });
+}
+
+async function dbDelete(store, key) {
+  if (useFallback) {
+    const all = await dbGetAll(store);
+    const filtered = all.filter(x => x.id !== key && x.key !== key);
+    localStorage.setItem(lsKey(store), b64Encode(JSON.stringify(filtered)));
+    return true;
+  }
+  return new Promise((resolve, reject) => {
+    try {
+      const tx = db.transaction(store, 'readwrite');
+      const os = tx.objectStore(store);
+      const req = os.delete(key);
+      req.onsuccess = () => resolve(true);
+      req.onerror = () => reject(req.error);
+    } catch(err) { reject(err); }
+  });
+}
+
+async function dbClear(store) {
+  if (useFallback) {
+    localStorage.removeItem(lsKey(store));
+    return true;
+  }
+  return new Promise((resolve, reject) => {
+    try {
+      const tx = db.transaction(store, 'readwrite');
+      const os = tx.objectStore(store);
+      const req = os.clear();
+      req.onsuccess = () => resolve(true);
+      req.onerror = () => reject(req.error);
+    } catch(err) { reject(err); }
+  });
+}
+
+/* ===========================================================
+   SETTINGS / META
+=========================================================== */
+async function loadSettings() {
+  const meta = await dbGetAll(STORES.META);
+  const map = {};
+  meta.forEach(m => map[m.key] = m.value);
+  state.settings = {
+    theme: map.theme || 'dark',
+    pinHash: map.pinHash || null,
+    pinLength: map.pinLength || 4,
+    recoveryHash: map.recoveryHash || null,
+    lastBackupPrompt: map.lastBackupPrompt || 0,
+    failedAttempts: map.failedAttempts || 0,
+    lockUntil: map.lockUntil || 0
+  };
+}
+
+async function saveSetting(key, value) {
+  await dbPut(STORES.META, { key, value });
+  state.settings[key] = value;
+}
+
+/* ===========================================================
+   CATEGORIES
+=========================================================== */
+async function loadCategories() {
+  let cats = await dbGetAll(STORES.CATS);
+  if (cats.length === 0) {
+    for (const name of DEFAULT_CATEGORIES) {
+      const c = { id: uid(), name, isDefault: true };
+      await dbPut(STORES.CATS, c);
+      cats.push(c);
+    }
+  }
+  state.categories = cats.sort((a,b) => a.name.localeCompare(b.name));
+}
+
+async function addCategory(name) {
+  name = (name || '').trim();
+  if (!name) throw new Error('Category name required');
+  if (state.categories.some(c => c.name.toLowerCase() === name.toLowerCase())) {
+    throw new Error('Category already exists');
+  }
+  const c = { id: uid(), name, isDefault: false };
+  await dbPut(STORES.CATS, c);
+  state.categories.push(c);
+  state.categories.sort((a,b) => a.name.localeCompare(b.name));
+}
+
+async function deleteCategory(id) {
+  await dbDelete(STORES.CATS, id);
+  state.categories = state.categories.filter(c => c.id !== id);
+}
+
+/* ===========================================================
+   TRANSACTIONS
+=========================================================== */
+async function loadTransactions() {
+  const raw = await dbGetAll(STORES.TX);
+  // Normalize: ensure isSettled exists (backward compat with old transactions)
+  state.transactions = raw.map(t => ({ ...t, isSettled: t.isSettled || false }));
+  state.transactions.sort((a,b) => b.date.localeCompare(a.date) || b.createdAt - a.createdAt);
+}
+
+async function addTransaction(data) {
+  validateTx(data);
+  const tx = {
+    id: uid(),
+    type: data.type,
+    title: data.title.trim(),
+    amount: safeNum(data.amount),
+    category: data.category,
+    notes: (data.notes||'').trim(),
+    date: data.date,
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+    isSettled: false
+  };
+  await dbPut(STORES.TX, tx);
+  state.transactions.unshift(tx);
+  state.transactions.sort((a,b) => b.date.localeCompare(a.date) || b.createdAt - a.createdAt);
+  return tx;
+}
+
+async function updateTransaction(id, data) {
+  validateTx(data);
+  const idx = state.transactions.findIndex(t => t.id === id);
+  if (idx < 0) throw new Error('Transaction not found');
+  const upd = {
+    ...state.transactions[idx],
+    type: data.type,
+    title: data.title.trim(),
+    amount: safeNum(data.amount),
+    category: data.category,
+    notes: (data.notes||'').trim(),
+    date: data.date,
+    updatedAt: Date.now(),
+    isSettled: state.transactions[idx].isSettled || false
+  };
+  await dbPut(STORES.TX, upd);
+  state.transactions[idx] = upd;
+  state.transactions.sort((a,b) => b.date.localeCompare(a.date) || b.createdAt - a.createdAt);
+  return upd;
+}
+
+async function deleteTransaction(id) {
+  await dbDelete(STORES.TX, id);
+  state.transactions = state.transactions.filter(t => t.id !== id);
+}
+
+async function settleTransaction(id) {
+  const idx = state.transactions.findIndex(t => t.id === id);
+  if (idx < 0) { toast('Transaction not found', 'error'); return; }
+  const t = state.transactions[idx];
+  if (t.isSettled) { toast('Already settled', 'info'); return; }
+  const upd = { ...t, isSettled: true, updatedAt: Date.now() };
+  await dbPut(STORES.TX, upd);
+  state.transactions[idx] = upd;
+  const label = t.type === 'lend' ? 'Lend settled — amount returned to balance' : 'Borrow settled — amount deducted from balance';
+  toast(label, 'success');
+  renderAll();
+  if ($('#view-analytics').classList.contains('active')) drawAllAnalytics();
+}
+
+function validateTx(data) {
+  if (!data.type || !['income','expense','lend','borrow'].includes(data.type)) throw new Error('Invalid type');
+  if (!data.title || !data.title.trim()) throw new Error('Title required');
+  const amt = safeNum(data.amount);
+  if (amt <= 0) throw new Error('Amount must be > 0');
+  if (!data.category) throw new Error('Category required');
+  if (!data.date || !/^\d{4}-\d{2}-\d{2}$/.test(data.date)) throw new Error('Invalid date');
+}
+
+/* ===========================================================
+   COMPUTATIONS
+=========================================================== */
+function computeTotals(txs = state.transactions) {
+  let income = 0, expense = 0, lend = 0, borrow = 0;
+  let lendUnsettled = 0, borrowUnsettled = 0;
+  for (const t of txs) {
+    const settled = t.isSettled === true;
+    if (t.type === 'income') income += t.amount;
+    else if (t.type === 'expense') expense += t.amount;
+    else if (t.type === 'lend') {
+      lend += t.amount;
+      if (!settled) lendUnsettled += t.amount;
+    }
+    else if (t.type === 'borrow') {
+      borrow += t.amount;
+      if (!settled) borrowUnsettled += t.amount;
+    }
+  }
+  // Balance uses unsettled lend/borrow only:
+  // Lend settled → money returned, no longer subtracted.
+  // Borrow settled → money repaid, no longer added.
+  const balance = (income + borrowUnsettled) - (expense + lendUnsettled);
+  return {
+    income: safeNum(income),
+    expense: safeNum(expense),
+    lend: safeNum(lend),
+    borrow: safeNum(borrow),
+    balance: safeNum(balance)
+  };
+}
+
+function txByMonth(year, month) {
+  const key = `${year}-${String(month+1).padStart(2,'0')}`;
+  return state.transactions.filter(t => t.date.startsWith(key));
+}
+
+/* ===========================================================
+   TOASTS
+=========================================================== */
+function toast(msg, type='info', duration=2500) {
+  const c = $('#toastContainer');
+  const el = document.createElement('div');
+  el.className = `toast ${type}`;
+  el.textContent = msg;
+  c.appendChild(el);
+  setTimeout(() => {
+    el.classList.add('hide');
+    setTimeout(() => el.remove(), 250);
+  }, duration);
+}
+
+/* ===========================================================
+   CONFIRM MODAL
+=========================================================== */
+function confirmAction(title, message, onConfirm) {
+  $('#confirmTitle').textContent = title;
+  $('#confirmMessage').textContent = message;
+  confirmCallback = onConfirm;
+  $('#confirmModal').classList.remove('hidden');
+}
+
+$('#confirmCancel').addEventListener('click', () => {
+  $('#confirmModal').classList.add('hidden');
+  confirmCallback = null;
+});
+$('#confirmOk').addEventListener('click', async () => {
+  $('#confirmModal').classList.add('hidden');
+  if (typeof confirmCallback === 'function') {
+    try { await confirmCallback(); } catch(e) { toast(e.message || 'Error', 'error'); }
+  }
+  confirmCallback = null;
+});
+
+/* ===========================================================
+   AUTH: SETUP / LOCK / RECOVERY
+=========================================================== */
+function showScreen(name) {
+  $('#splash').classList.add('hidden');
+  $('#setupScreen').classList.add('hidden');
+  $('#lockScreen').classList.add('hidden');
+  $('#recoveryScreen').classList.add('hidden');
+  $('#app').classList.add('hidden');
+  if (name === 'setup') $('#setupScreen').classList.remove('hidden');
+  else if (name === 'lock') $('#lockScreen').classList.remove('hidden');
+  else if (name === 'recovery') $('#recoveryScreen').classList.remove('hidden');
+  else if (name === 'app') $('#app').classList.remove('hidden');
+}
+
+/* SETUP */
+let setupPinLen = 4;
+$$('#pinLengthGroup .pill').forEach(p => {
+  p.addEventListener('click', () => {
+    $$('#pinLengthGroup .pill').forEach(x => x.classList.remove('active'));
+    p.classList.add('active');
+    setupPinLen = parseInt(p.dataset.len,10);
+    $('#setupPin').maxLength = setupPinLen;
+    $('#setupPinConfirm').maxLength = setupPinLen;
+  });
+});
+
+$('#setupSubmit').addEventListener('click', async () => {
+  const pin = $('#setupPin').value;
+  const cpin = $('#setupPinConfirm').value;
+  const rec = $('#setupRecovery').value.trim();
+
+  if (!/^\d+$/.test(pin) || pin.length !== setupPinLen) {
+    return toast(`PIN must be ${setupPinLen} digits`, 'error');
+  }
+  if (pin !== cpin) return toast('PINs do not match', 'error');
+  if (rec.length < 4) return toast('Recovery key too short (min 4 chars)', 'error');
+
+  try {
+    const pinHash = await sha256(pin);
+    const recHash = await sha256(rec);
+    await saveSetting('pinHash', pinHash);
+    await saveSetting('pinLength', setupPinLen);
+    await saveSetting('recoveryHash', recHash);
+    await saveSetting('failedAttempts', 0);
+    toast('Account created', 'success');
+    enterApp();
+  } catch(e) {
+    toast('Setup failed: ' + e.message, 'error');
+  }
+});
+
+/* LOCK */
+function renderPinDots() {
+  const dots = $('#pinDots');
+  dots.innerHTML = '';
+  const len = state.settings.pinLength || 4;
+  const val = $('#lockPin').value;
+  for (let i=0; i<len; i++) {
+    const d = document.createElement('span');
+    if (i < val.length) d.classList.add('filled');
+    dots.appendChild(d);
+  }
+}
+
+$('#lockPin').addEventListener('input', () => {
+  $('#lockPin').value = $('#lockPin').value.replace(/\D/g,'').slice(0, state.settings.pinLength);
+  renderPinDots();
+  $('#lockError').textContent = '';
+  if ($('#lockPin').value.length === state.settings.pinLength) {
+    setTimeout(tryUnlock, 100);
+  }
+});
+
+$('#unlockBtn').addEventListener('click', tryUnlock);
+
+async function tryUnlock() {
+  if (state.settings.lockUntil && Date.now() < state.settings.lockUntil) {
+    const sec = Math.ceil((state.settings.lockUntil - Date.now()) / 1000);
+    $('#lockError').textContent = `Too many attempts. Try again in ${sec}s.`;
+    return;
+  }
+  const pin = $('#lockPin').value;
+  if (pin.length !== state.settings.pinLength) {
+    $('#lockError').textContent = 'Enter full PIN';
+    return;
+  }
+  const h = await sha256(pin);
+  if (h === state.settings.pinHash) {
+    await saveSetting('failedAttempts', 0);
+    await saveSetting('lockUntil', 0);
+    $('#lockPin').value = '';
+    renderPinDots();
+    enterApp();
+  } else {
+    const attempts = (state.settings.failedAttempts || 0) + 1;
+    await saveSetting('failedAttempts', attempts);
+    if (attempts >= 5) {
+      const lockMs = Math.min(60000 * Math.pow(2, attempts - 5), 600000);
+      await saveSetting('lockUntil', Date.now() + lockMs);
+      $('#lockError').textContent = `Too many attempts. Locked ${Math.ceil(lockMs/1000)}s.`;
+    } else {
+      $('#lockError').textContent = `Wrong PIN. ${5 - attempts} attempts left.`;
+    }
+    $('#lockPin').value = '';
+    renderPinDots();
+  }
+}
+
+$('#forgotPinBtn').addEventListener('click', () => {
+  $('#recoveryKeyInput').value = '';
+  $('#recoveryNewPin').value = '';
+  $('#recoveryNewPinConfirm').value = '';
+  showScreen('recovery');
+});
+
+$('#recoveryCancel').addEventListener('click', () => showScreen('lock'));
+
+$('#recoverySubmit').addEventListener('click', async () => {
+  const key = $('#recoveryKeyInput').value.trim();
+  const np = $('#recoveryNewPin').value;
+  const nc = $('#recoveryNewPinConfirm').value;
+
+  if (!key) return toast('Enter recovery key', 'error');
+  const h = await sha256(key);
+  if (h !== state.settings.recoveryHash) return toast('Invalid recovery key', 'error');
+  if (!/^\d+$/.test(np) || (np.length !== 4 && np.length !== 6)) return toast('PIN must be 4 or 6 digits', 'error');
+  if (np !== nc) return toast('PINs do not match', 'error');
+
+  confirmAction('Reset PIN?', 'You are about to change your PIN using your recovery key.', async () => {
+    const ph = await sha256(np);
+    await saveSetting('pinHash', ph);
+    await saveSetting('pinLength', np.length);
+    await saveSetting('failedAttempts', 0);
+    await saveSetting('lockUntil', 0);
+    toast('PIN reset successful', 'success');
+    showScreen('lock');
+    renderPinDots();
+  });
+});
+
+$('#lockNowBtn').addEventListener('click', lockApp);
+
+function lockApp() {
+  $('#lockPin').value = '';
+  renderPinDots();
+  showScreen('lock');
+  setTimeout(() => $('#lockPin').focus(), 100);
+}
+
+/* ===========================================================
+   ENTER APP / NAV
+=========================================================== */
+async function enterApp() {
+  showScreen('app');
+  applyTheme(state.settings.theme);
+  populateCategorySelect();
+  populateMonthYearFilters();
+  renderAll();
+  checkBackupReminder();
+}
+
+$$('.nav-btn[data-nav]').forEach(b => {
+  b.addEventListener('click', () => navigateTo(b.dataset.nav));
+});
+$$('[data-nav]').forEach(b => {
+  b.addEventListener('click', () => navigateTo(b.dataset.nav));
+});
+
+function navigateTo(view) {
+  $$('.view').forEach(v => v.classList.remove('active'));
+  const target = $('#view-' + view);
+  if (target) target.classList.add('active');
+  $$('.nav-btn[data-nav]').forEach(b => b.classList.toggle('active', b.dataset.nav === view));
+  if (view === 'analytics') drawAllAnalytics();
+  if (view === 'dashboard') drawDashboardChart();
+  if (view === 'history') renderHistory();
+  if (view === 'settings') renderCategoriesList();
+}
+
+/* ===========================================================
+   THEME
+=========================================================== */
+function applyTheme(t) {
+  document.body.dataset.theme = t;
+  $('#themeToggle').textContent = t === 'dark' ? '🌙' : '☀️';
+  const ds = $('#darkSwitch');
+  if (ds) ds.checked = (t === 'dark');
+  // Redraw charts to reflect theme
+  setTimeout(() => {
+    if ($('#view-dashboard').classList.contains('active')) drawDashboardChart();
+    if ($('#view-analytics').classList.contains('active')) drawAllAnalytics();
+  }, 100);
+}
+
+$('#themeToggle').addEventListener('click', async () => {
+  const next = state.settings.theme === 'dark' ? 'light' : 'dark';
+  await saveSetting('theme', next);
+  applyTheme(next);
+});
+
+document.addEventListener('change', async (e) => {
+  if (e.target && e.target.id === 'darkSwitch') {
+    const next = e.target.checked ? 'dark' : 'light';
+    await saveSetting('theme', next);
+    applyTheme(next);
+  }
+});
+
+/* ===========================================================
+   RENDER: DASHBOARD
+=========================================================== */
+function renderAll() {
+  renderDashboard();
+  renderHistory();
+  renderCategoriesList();
+}
+
+function renderDashboard() {
+  const t = computeTotals();
+  $('#totalBalance').textContent = fmtMoney(t.balance);
+  $('#totalIncome').textContent = fmtMoney(t.income);
+  $('#totalExpense').textContent = fmtMoney(t.expense);
+  $('#totalLend').textContent = fmtMoney(t.lend);
+  $('#totalBorrow').textContent = fmtMoney(t.borrow);
+
+  $('#balanceCard').classList.toggle('negative', t.balance < 0);
+
+  // Month label
+  const now = new Date();
+  $('#monthLabel').textContent = monthName(now.getMonth()) + ' ' + now.getFullYear();
+
+  // Recent
+  const recent = state.transactions.slice(0,5);
+  renderTxList($('#recentList'), recent);
+
+  drawDashboardChart();
+}
+
+function renderTxList(container, txs) {
+  container.innerHTML = '';
+  if (!txs.length) {
+    container.innerHTML = '<div class="empty">No transactions yet</div>';
+    return;
+  }
+  for (const t of txs) {
+    const el = document.createElement('div');
+    const isLendBorrow = (t.type === 'lend' || t.type === 'borrow');
+    el.className = 'tx-item' + (t.isSettled ? ' settled-item' : '');
+    el.dataset.id = t.id;
+    const sign = (t.type === 'income' || t.type === 'borrow') ? '+' : '−';
+    const amtClass =
+      t.type === 'income' ? 'pos' :
+      t.type === 'expense' ? 'neg' :
+      t.type === 'lend' ? 'lend' : 'borrow';
+    const icon = t.type === 'income' ? '↓' : t.type === 'expense' ? '↑' : t.type === 'lend' ? '↗' : '↘';
+
+    let settlePart = '';
+    if (isLendBorrow) {
+      if (!t.isSettled) {
+        settlePart = `<button class="settle-btn" data-id="${escapeHtml(t.id)}" title="Mark as Settled">✅</button>`;
+      } else {
+        settlePart = `<span class="settled-badge">✅ Settled</span>`;
+      }
+    }
+
+    el.innerHTML = `
+      <div class="tx-icon ${t.type}">${icon}</div>
+      <div class="tx-info">
+        <div class="tx-title">${escapeHtml(t.title)}</div>
+        <div class="tx-meta">${escapeHtml(t.category)} • ${formatDateLabel(t.date)}</div>
+      </div>
+      <div class="tx-right">
+        <div class="tx-amount ${amtClass}">${sign}${fmtMoney(t.amount).replace(CURRENCY,CURRENCY)}</div>
+        ${settlePart}
+      </div>
+    `;
+    el.addEventListener('click', (e) => {
+      if (e.target.closest('.settle-btn')) return;
+      openTxModal(t);
+    });
+    container.appendChild(el);
+  }
+
+  // Wire up settle buttons
+  container.querySelectorAll('.settle-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const id = btn.dataset.id;
+      const tx = state.transactions.find(t => t.id === id);
+      if (!tx) return;
+      const msg = tx.type === 'lend'
+        ? 'Mark as settled? The lent amount will be returned to your balance.'
+        : 'Mark as settled? The borrowed amount will be deducted from your balance.';
+      confirmAction('Settle transaction?', msg, async () => {
+        await settleTransaction(id);
+      });
+    });
+  });
+}
+
+function escapeHtml(s) {
+  return String(s||'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+function formatDateLabel(iso) {
+  const d = parseDate(iso);
+  return d.toLocaleDateString('en-US', { day:'numeric', month:'short', year:'numeric' });
+}
+
+/* ===========================================================
+   RENDER: HISTORY
+=========================================================== */
+function populateMonthYearFilters() {
+  const fm = $('#filterMonth');
+  const fy = $('#filterYear');
+  fm.innerHTML = '<option value="all">All Months</option>';
+  for (let i=0; i<12; i++) {
+    const o = document.createElement('option');
+    o.value = String(i+1).padStart(2,'0');
+    o.textContent = monthName(i);
+    fm.appendChild(o);
+  }
+
+  // years from transactions + current
+  const years = new Set();
+  years.add(new Date().getFullYear());
+  state.transactions.forEach(t => years.add(parseInt(t.date.slice(0,4),10)));
+  const yArr = Array.from(years).sort((a,b)=>b-a);
+
+  fy.innerHTML = '<option value="all">All Years</option>';
+  yArr.forEach(y => {
+    const o = document.createElement('option');
+    o.value = String(y); o.textContent = y;
+    fy.appendChild(o);
+  });
+}
+
+['searchInput','filterType','filterMonth','filterYear'].forEach(id => {
+  document.addEventListener('input', e => { if (e.target.id === id) renderHistory(); });
+  document.addEventListener('change', e => { if (e.target.id === id) renderHistory(); });
+});
+
+function renderHistory() {
+  const q = ($('#searchInput')?.value || '').toLowerCase().trim();
+  const type = $('#filterType')?.value || 'all';
+  const month = $('#filterMonth')?.value || 'all';
+  const year = $('#filterYear')?.value || 'all';
+
+  let list = state.transactions.slice();
+  if (type !== 'all') list = list.filter(t => t.type === type);
+  if (year !== 'all') list = list.filter(t => t.date.startsWith(year));
+  if (month !== 'all') list = list.filter(t => t.date.slice(5,7) === month);
+  if (q) list = list.filter(t =>
+    t.title.toLowerCase().includes(q) ||
+    (t.category||'').toLowerCase().includes(q) ||
+    (t.notes||'').toLowerCase().includes(q)
+  );
+
+  renderTxList($('#historyList'), list);
+}
+
+/* ===========================================================
+   TX MODAL
+=========================================================== */
+function populateCategorySelect() {
+  const sel = $('#txCategory');
+  sel.innerHTML = '';
+  state.categories.forEach(c => {
+    const o = document.createElement('option');
+    o.value = c.name; o.textContent = c.name;
+    sel.appendChild(o);
+  });
+}
+
+let modalType = 'income';
+function setModalType(type) {
+  modalType = type;
+  $$('#txTypeGroup .pill').forEach(p => p.classList.toggle('active', p.dataset.type === type));
+}
+$$('#txTypeGroup .pill').forEach(p => {
+  p.addEventListener('click', () => setModalType(p.dataset.type));
+});
+
+function openTxModal(existing=null, presetType=null) {
+  const m = $('#txModal');
+  $('#txId').value = existing?.id || '';
+  $('#txTitle').value = existing?.title || '';
+  $('#txAmount').value = existing?.amount ?? '';
+  $('#txNotes').value = existing?.notes || '';
+  $('#txDate').value = existing?.date || todayISO();
+
+  populateCategorySelect();
+  $('#txCategory').value = existing?.category || (state.categories[0]?.name || '');
+
+  setModalType(existing?.type || presetType || 'income');
+  $('#txModalTitle').textContent = existing ? 'Edit Transaction' : 'Add Transaction';
+
+  m.classList.remove('hidden');
+}
+
+function closeTxModal() { $('#txModal').classList.add('hidden'); }
+$('#txModalClose').addEventListener('click', closeTxModal);
+$('#txModal').addEventListener('click', (e) => { if (e.target.id === 'txModal') closeTxModal(); });
+
+$('#fabAdd').addEventListener('click', () => openTxModal());
+$$('.qa').forEach(b => b.addEventListener('click', () => openTxModal(null, b.dataset.type)));
+
+$('#txForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const id = $('#txId').value;
+  const data = {
+    type: modalType,
+    title: $('#txTitle').value,
+    amount: $('#txAmount').value,
+    category: $('#txCategory').value,
+    notes: $('#txNotes').value,
+    date: $('#txDate').value
+  };
+  try {
+    if (id) {
+      await updateTransaction(id, data);
+      toast('Updated successfully', 'success');
+    } else {
+      await addTransaction(data);
+      toast('Saved successfully', 'success');
+    }
+    closeTxModal();
+    populateMonthYearFilters();
+    renderAll();
+    if ($('#view-analytics').classList.contains('active')) drawAllAnalytics();
+  } catch(err) {
+    toast(err.message || 'Error saving', 'error');
+  }
+});
+
+/* Long-press / right-click on tx item to delete via confirm */
+$('#recentList').addEventListener('contextmenu', txContextDelete);
+$('#historyList').addEventListener('contextmenu', txContextDelete);
+function txContextDelete(e) {
+  const item = e.target.closest('.tx-item');
+  if (!item) return;
+  e.preventDefault();
+  const id = item.dataset.id;
+  confirmAction('Delete transaction?', 'This action cannot be undone.', async () => {
+    await deleteTransaction(id);
+    toast('Deleted successfully', 'success');
+    renderAll();
+    if ($('#view-analytics').classList.contains('active')) drawAllAnalytics();
+  });
+}
+
+/* Add a delete option inside edit modal as a swipe? Provide a delete button alternative: long-press */
+let pressTimer = null;
+['recentList','historyList'].forEach(id => {
+  const el = $('#' + id);
+  el.addEventListener('touchstart', (e) => {
+    const item = e.target.closest('.tx-item');
+    if (!item) return;
+    pressTimer = setTimeout(() => {
+      const tid = item.dataset.id;
+      confirmAction('Delete transaction?','This action cannot be undone.', async () => {
+        await deleteTransaction(tid);
+        toast('Deleted successfully','success');
+        renderAll();
+      });
+    }, 600);
+  }, {passive:true});
+  el.addEventListener('touchend', () => clearTimeout(pressTimer));
+  el.addEventListener('touchmove', () => clearTimeout(pressTimer));
+});
+
+/* ===========================================================
+   CATEGORIES UI
+=========================================================== */
+function renderCategoriesList() {
+  const c = $('#categoryList');
+  if (!c) return;
+  c.innerHTML = '';
+  state.categories.forEach(cat => {
+    const chip = document.createElement('span');
+    chip.className = 'chip';
+    chip.innerHTML = `${escapeHtml(cat.name)}${!cat.isDefault ? ' <button data-id="'+cat.id+'">✕</button>':''}`;
+    c.appendChild(chip);
+  });
+  $$('#categoryList .chip button').forEach(b => {
+    b.addEventListener('click', () => {
+      confirmAction('Delete category?','Existing transactions keep this category as a label.', async () => {
+        await deleteCategory(b.dataset.id);
+        renderCategoriesList();
+        populateCategorySelect();
+        toast('Category deleted','success');
+      });
+    });
+  });
+}
+
+$('#addCategoryBtn').addEventListener('click', async () => {
+  const name = $('#newCategory').value;
+  try {
+    await addCategory(name);
+    $('#newCategory').value = '';
+    renderCategoriesList();
+    populateCategorySelect();
+    toast('Category added','success');
+  } catch(e) { toast(e.message,'error'); }
+});
+
+/* ===========================================================
+   PIN MANAGEMENT (Settings)
+=========================================================== */
+let newPinLen = 4;
+$$('#pinNewLenGroup .pill').forEach(p => {
+  p.addEventListener('click', () => {
+    $$('#pinNewLenGroup .pill').forEach(x => x.classList.remove('active'));
+    p.classList.add('active');
+    newPinLen = parseInt(p.dataset.len,10);
+    $('#pinNew').maxLength = newPinLen;
+    $('#pinNewConfirm').maxLength = newPinLen;
+  });
+});
+
+$('#changePinBtn').addEventListener('click', () => {
+  $('#pinCurrent').value = '';
+  $('#pinNew').value = '';
+  $('#pinNewConfirm').value = '';
+  newPinLen = state.settings.pinLength;
+  $$('#pinNewLenGroup .pill').forEach(p => p.classList.toggle('active', parseInt(p.dataset.len,10) === newPinLen));
+  $('#pinModal').classList.remove('hidden');
+});
+$('#pinModalClose').addEventListener('click', () => $('#pinModal').classList.add('hidden'));
+
+$('#pinSaveBtn').addEventListener('click', async () => {
+  const cur = $('#pinCurrent').value;
+  const np = $('#pinNew').value;
+  const nc = $('#pinNewConfirm').value;
+  const ch = await sha256(cur);
+  if (ch !== state.settings.pinHash) return toast('Current PIN is wrong','error');
+  if (!/^\d+$/.test(np) || np.length !== newPinLen) return toast('New PIN length mismatch','error');
+  if (np !== nc) return toast('PINs do not match','error');
+  const nh = await sha256(np);
+  await saveSetting('pinHash', nh);
+  await saveSetting('pinLength', newPinLen);
+  $('#pinModal').classList.add('hidden');
+  toast('PIN updated','success');
+});
+
+/* RECOVERY RESET */
+$('#resetRecoveryBtn').addEventListener('click', () => {
+  $('#rrCurrentPin').value = '';
+  $('#rrNewKey').value = '';
+  $('#recoveryResetModal').classList.remove('hidden');
+});
+$('#recoveryResetClose').addEventListener('click', () => $('#recoveryResetModal').classList.add('hidden'));
+
+$('#rrSaveBtn').addEventListener('click', async () => {
+  const cp = $('#rrCurrentPin').value;
+  const nk = $('#rrNewKey').value.trim();
+  const ch = await sha256(cp);
+  if (ch !== state.settings.pinHash) return toast('Wrong PIN','error');
+  if (nk.length < 4) return toast('Recovery key too short','error');
+  confirmAction('Reset recovery key?','You will not see it again. Save it before confirming.', async () => {
+    const nh = await sha256(nk);
+    await saveSetting('recoveryHash', nh);
+    $('#recoveryResetModal').classList.add('hidden');
+    toast('Recovery key updated','success');
+  });
+});
+
+/* ===========================================================
+   BACKUP / IMPORT / CLEAR
+=========================================================== */
+$('#exportBtn').addEventListener('click', async () => {
+  try {
+    const data = {
+      app: 'CoinLence',
+      version: '2.0',
+      exportedAt: new Date().toISOString(),
+      transactions: state.transactions,
+      categories: state.categories,
+      settings: state.settings
+    };
+    const json = JSON.stringify(data, null, 2);
+    const blob = new Blob([json], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `coinlence-backup-${todayISO()}.json`;
+    document.body.appendChild(a); a.click(); a.remove();
+    URL.revokeObjectURL(url);
+    await saveSetting('lastBackupPrompt', Date.now());
+    toast('Backup ready','success');
+  } catch(e) { toast('Export failed: ' + e.message,'error'); }
+});
+
+$('#importBtn').addEventListener('click', () => $('#importFile').click());
+$('#importFile').addEventListener('change', async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const text = await file.text();
+  let data;
+  try { data = JSON.parse(text); } catch(_) { return toast('Invalid JSON','error'); }
+  if (!data || data.app !== 'CoinLence') return toast('Not a CoinLence backup','error');
+
+  confirmAction('Import backup?','This will replace ALL current data with the backup contents.', async () => {
+    try {
+      await dbClear(STORES.TX);
+      await dbClear(STORES.CATS);
+      // do NOT wipe meta to keep current PIN unless backup includes a settings; but we should restore settings carefully
+      if (Array.isArray(data.transactions)) {
+        for (const t of data.transactions) {
+          if (t && t.id && t.type && t.date) await dbPut(STORES.TX, t);
+        }
+      }
+      if (Array.isArray(data.categories)) {
+        for (const c of data.categories) {
+          if (c && c.id && c.name) await dbPut(STORES.CATS, c);
+        }
+      }
+      if (data.settings && typeof data.settings === 'object') {
+        // Only restore non-sensitive prefs
+        if (data.settings.theme) await saveSetting('theme', data.settings.theme);
+      }
+      await loadCategories();
+      await loadTransactions();
+      populateMonthYearFilters();
+      populateCategorySelect();
+      renderAll();
+      toast('Backup imported','success');
+    } catch(err) { toast('Import failed: ' + err.message,'error'); }
+  });
+  e.target.value = '';
+});
+
+$('#clearDataBtn').addEventListener('click', () => {
+  confirmAction('Clear all data?','This will delete ALL transactions and custom categories. PIN is preserved.', async () => {
+    try {
+      await dbClear(STORES.TX);
+      await dbClear(STORES.CATS);
+      state.transactions = [];
+      state.categories = [];
+      await loadCategories();
+      populateCategorySelect();
+      populateMonthYearFilters();
+      renderAll();
+      toast('Data cleared','success');
+    } catch(e) { toast('Failed: ' + e.message,'error'); }
+  });
+});
+
+/* ===========================================================
+   BACKUP REMINDER
+=========================================================== */
+function checkBackupReminder() {
+  const last = state.settings.lastBackupPrompt || 0;
+  const days = (Date.now() - last) / 86400000;
+  if (days >= BACKUP_REMINDER_DAYS && state.transactions.length > 0) {
+    setTimeout(() => {
+      toast('Tip: Backup your data from Settings ↻','info', 4000);
+    }, 1500);
+  }
+}
+
+/* ===========================================================
+   CHARTS — Pure Canvas API
+=========================================================== */
+function getChartColors() {
+  const dark = document.body.dataset.theme === 'dark';
+  return {
+    text: dark ? '#cdd5e3' : '#1a2238',
+    grid: dark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)',
+    income: '#2ecc71',
+    expense: '#ff5c5c',
+    lend: '#ffb547',
+    borrow: '#a17bff',
+    primary: '#5b8cff'
+  };
+}
+
+function setupCanvas(canvas) {
+  const dpr = window.devicePixelRatio || 1;
+  const rect = canvas.getBoundingClientRect();
+  canvas.width = rect.width * dpr;
+  canvas.height = rect.height * dpr;
+  const ctx = canvas.getContext('2d');
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  ctx.clearRect(0,0,rect.width,rect.height);
+  return { ctx, w: rect.width, h: rect.height };
+}
+
+function drawDashboardChart() {
+  const cv = $('#chartMonthly');
+  if (!cv) return;
+  const { ctx, w, h } = setupCanvas(cv);
+  const colors = getChartColors();
+
+  const now = new Date();
+  const txs = txByMonth(now.getFullYear(), now.getMonth());
+  const t = computeTotals(txs);
+  const data = [
+    { label:'Income', value: t.income, color: colors.income },
+    { label:'Expense', value: t.expense, color: colors.expense },
+    { label:'Lend', value: t.lend, color: colors.lend },
+    { label:'Borrow', value: t.borrow, color: colors.borrow }
+  ];
+  drawBarChart(ctx, w, h, data, colors);
+}
+
+function drawBarChart(ctx, w, h, data, colors) {
+  const padL = 50, padR = 16, padT = 16, padB = 40;
+  const cw = w - padL - padR;
+  const ch = h - padT - padB;
+  const max = Math.max(1, ...data.map(d=>d.value));
+  // y grid (4 lines)
+  ctx.strokeStyle = colors.grid;
+  ctx.fillStyle = colors.text;
+  ctx.font = '11px sans-serif';
+  ctx.textAlign = 'right';
+  for (let i=0; i<=4; i++) {
+    const y = padT + (ch / 4) * i;
+    ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(w-padR, y); ctx.stroke();
+    const val = max - (max/4)*i;
+    ctx.fillText(formatShort(val), padL-6, y+4);
+  }
+  const barW = cw / data.length * 0.55;
+  const gap = cw / data.length;
+  ctx.textAlign = 'center';
+  data.forEach((d, i) => {
+    const x = padL + gap*i + (gap-barW)/2;
+    const bh = (d.value / max) * ch;
+    const y = padT + ch - bh;
+    // gradient
+    const grad = ctx.createLinearGradient(0,y,0,y+bh);
+    grad.addColorStop(0, d.color);
+    grad.addColorStop(1, d.color + '88');
+    ctx.fillStyle = grad;
+    roundRect(ctx, x, y, barW, bh, 6);
+    ctx.fill();
+    // label
+    ctx.fillStyle = colors.text;
+    ctx.fillText(d.label, x + barW/2, h - padB + 18);
+    // value above
+    if (bh > 14) {
+      ctx.fillStyle = colors.text;
+      ctx.font = 'bold 11px sans-serif';
+      ctx.fillText(formatShort(d.value), x + barW/2, y - 4);
+      ctx.font = '11px sans-serif';
+    }
+  });
+}
+
+function roundRect(ctx, x, y, w, h, r) {
+  if (h < 1) h = 1;
+  r = Math.min(r, w/2, h/2);
+  ctx.beginPath();
+  ctx.moveTo(x+r, y);
+  ctx.lineTo(x+w-r, y);
+  ctx.quadraticCurveTo(x+w, y, x+w, y+r);
+  ctx.lineTo(x+w, y+h);
+  ctx.lineTo(x, y+h);
+  ctx.lineTo(x, y+r);
+  ctx.quadraticCurveTo(x, y, x+r, y);
+  ctx.closePath();
+}
+
+function formatShort(n) {
+  n = Number(n) || 0;
+  if (n >= 1e7) return (n/1e7).toFixed(1)+'Cr';
+  if (n >= 1e5) return (n/1e5).toFixed(1)+'L';
+  if (n >= 1e3) return (n/1e3).toFixed(1)+'K';
+  return n.toFixed(0);
+}
+
+function drawAllAnalytics() {
+  drawIncomeExpenseChart();
+  drawExpenseBreakdownChart();
+  drawLendBorrowChart();
+  drawMonthlyTrendChart();
+}
+
+function drawIncomeExpenseChart() {
+  const cv = $('#chartIncomeExpense');
+  if (!cv) return;
+  const { ctx, w, h } = setupCanvas(cv);
+  const colors = getChartColors();
+  const t = computeTotals();
+  drawBarChart(ctx, w, h, [
+    { label:'Income', value: t.income, color: colors.income },
+    { label:'Expense', value: t.expense, color: colors.expense }
+  ], colors);
+}
+
+function drawLendBorrowChart() {
+  const cv = $('#chartLendBorrow');
+  if (!cv) return;
+  const { ctx, w, h } = setupCanvas(cv);
+  const colors = getChartColors();
+  const t = computeTotals();
+  drawBarChart(ctx, w, h, [
+    { label:'Lend', value: t.lend, color: colors.lend },
+    { label:'Borrow', value: t.borrow, color: colors.borrow }
+  ], colors);
+}
+
+function drawExpenseBreakdownChart() {
+  const cv = $('#chartExpenseBreakdown');
+  if (!cv) return;
+  const { ctx, w, h } = setupCanvas(cv);
+  const colors = getChartColors();
+  const map = {};
+  state.transactions.filter(t => t.type === 'expense').forEach(t => {
+    map[t.category] = (map[t.category] || 0) + t.amount;
+  });
+  const entries = Object.entries(map).sort((a,b)=>b[1]-a[1]);
+  if (!entries.length) {
+    ctx.fillStyle = colors.text;
+    ctx.font = '13px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('No expense data', w/2, h/2);
+    return;
+  }
+  // Donut
+  const cx = h*0.55, cy = h/2, r = Math.min(h, w*0.5)/2 - 16;
+  const total = entries.reduce((s,[,v])=>s+v,0);
+  const palette = ['#ff5c5c','#ffb547','#5b8cff','#a17bff','#2ecc71','#ff8fab','#48cae4','#f4a261','#9d4edd','#06d6a0'];
+  let start = -Math.PI/2;
+  entries.forEach(([_, v], i) => {
+    const slice = (v/total) * Math.PI * 2;
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.arc(cx, cy, r, start, start + slice);
+    ctx.closePath();
+    ctx.fillStyle = palette[i % palette.length];
+    ctx.fill();
+    start += slice;
+  });
+  // inner hole
+  ctx.beginPath();
+  ctx.arc(cx, cy, r*0.55, 0, Math.PI*2);
+  ctx.fillStyle = document.body.dataset.theme === 'dark' ? '#121a2c' : '#ffffff';
+  ctx.fill();
+  // total in middle
+  ctx.fillStyle = colors.text;
+  ctx.font = 'bold 14px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText(formatShort(total), cx, cy - 2);
+  ctx.font = '10px sans-serif';
+  ctx.fillText('Total Expense', cx, cy + 14);
+
+  // legend
+  const lx = h + 8;
+  let ly = 16;
+  ctx.font = '11px sans-serif';
+  ctx.textAlign = 'left';
+  entries.slice(0,8).forEach(([name,v],i) => {
+    ctx.fillStyle = palette[i % palette.length];
+    ctx.fillRect(lx, ly, 10, 10);
+    ctx.fillStyle = colors.text;
+    const pct = ((v/total)*100).toFixed(0) + '%';
+    const label = name.length > 10 ? name.slice(0,9)+'…' : name;
+    ctx.fillText(`${label}  ${pct}`, lx + 16, ly + 9);
+    ly += 18;
+  });
+}
+
+function drawMonthlyTrendChart() {
+  const cv = $('#chartMonthlyTrend');
+  if (!cv) return;
+  const { ctx, w, h } = setupCanvas(cv);
+  const colors = getChartColors();
+
+  // last 6 months
+  const months = [];
+  const now = new Date();
+  for (let i=5; i>=0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth()-i, 1);
+    months.push({
+      key: `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`,
+      label: monthName(d.getMonth()).slice(0,3)
+    });
+  }
+  const data = months.map(m => {
+    const txs = state.transactions.filter(t => t.date.startsWith(m.key));
+    const t = computeTotals(txs);
+    return { label: m.label, income: t.income, expense: t.expense };
+  });
+
+  const padL = 44, padR = 12, padT = 14, padB = 40;
+  const cw = w - padL - padR;
+  const ch = h - padT - padB;
+  const max = Math.max(1, ...data.flatMap(d => [d.income, d.expense]));
+
+  // grid
+  ctx.strokeStyle = colors.grid;
+  ctx.fillStyle = colors.text;
+  ctx.font = '11px sans-serif';
+  ctx.textAlign = 'right';
+  for (let i=0;i<=4;i++){
+    const y = padT + (ch/4)*i;
+    ctx.beginPath(); ctx.moveTo(padL,y); ctx.lineTo(w-padR,y); ctx.stroke();
+    ctx.fillText(formatShort(max-(max/4)*i), padL-6, y+4);
+  }
+
+  const stepX = cw / Math.max(1, data.length-1);
+
+  // line drawing helper
+  function drawLine(key, color) {
+    ctx.strokeStyle = color; ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    data.forEach((d,i) => {
+      const x = padL + stepX*i;
+      const y = padT + ch - (d[key]/max)*ch;
+      if (i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+    });
+    ctx.stroke();
+    // dots
+    ctx.fillStyle = color;
+    data.forEach((d,i) => {
+      const x = padL + stepX*i;
+      const y = padT + ch - (d[key]/max)*ch;
+      ctx.beginPath(); ctx.arc(x,y,3,0,Math.PI*2); ctx.fill();
+    });
+  }
+
+  drawLine('income', colors.income);
+  drawLine('expense', colors.expense);
+
+  // x labels
+  ctx.fillStyle = colors.text;
+  ctx.textAlign = 'center';
+  data.forEach((d,i) => {
+    const x = padL + stepX*i;
+    ctx.fillText(d.label, x, h - padB + 18);
+  });
+
+  // legend
+  ctx.textAlign = 'left';
+  ctx.fillStyle = colors.income; ctx.fillRect(padL, h - 14, 10, 10);
+  ctx.fillStyle = colors.text; ctx.fillText('Income', padL+14, h - 5);
+  ctx.fillStyle = colors.expense; ctx.fillRect(padL+70, h - 14, 10, 10);
+  ctx.fillStyle = colors.text; ctx.fillText('Expense', padL+84, h - 5);
+}
+
+/* Redraw on resize */
+let resizeTimer;
+window.addEventListener('resize', () => {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(() => {
+    if ($('#view-dashboard').classList.contains('active')) drawDashboardChart();
+    if ($('#view-analytics').classList.contains('active')) drawAllAnalytics();
+  }, 150);
+});
+
+/* ===========================================================
+   AUTO-LOCK INACTIVITY (15 min)
+=========================================================== */
+function resetLockTimer() {
+  if (lockTimer) clearTimeout(lockTimer);
+  lockTimer = setTimeout(() => {
+    if (!$('#app').classList.contains('hidden')) lockApp();
+  }, 15 * 60 * 1000);
+}
+['click','touchstart','keydown','mousemove'].forEach(ev =>
+  document.addEventListener(ev, resetLockTimer, { passive: true })
+);
+
+/* ===========================================================
+   SERVICE WORKER
+=========================================================== */
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js').catch(err => console.warn('SW reg failed', err));
+  });
+}
+
+/* ===========================================================
+   INIT
+=========================================================== */
+async function init() {
+  try {
+    await dbInit();
+    await loadSettings();
+    await loadCategories();
+    await loadTransactions();
+
+    applyTheme(state.settings.theme);
+
+    // splash hold
+    setTimeout(() => {
+      if (!state.settings.pinHash) {
+        showScreen('setup');
+      } else {
+        showScreen('lock');
+        renderPinDots();
+        $('#lockPin').focus();
+      }
+    }, 600);
+  } catch(err) {
+    console.error('Init failed', err);
+    toast('Initialization failed: ' + err.message, 'error', 5000);
+    setTimeout(() => showScreen('setup'), 800);
+  }
+}
+
+document.addEventListener('DOMContentLoaded', init);
+
+})();
