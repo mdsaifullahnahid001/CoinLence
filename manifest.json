@@ -2,6 +2,7 @@
   "name": "CoinLence",
   "short_name": "CoinLence",
   "description": "Premium offline-first personal finance tracker with PIN security, smart analytics, and monthly reports.",
+  "id": "/",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
@@ -13,16 +14,58 @@
   "categories": ["finance", "productivity", "utilities"],
   "icons": [
     {
-      "src": "https://via.placeholder.com/192",
+      "src": "assets/icon/icon-192.png",
       "sizes": "192x192",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "any"
     },
     {
-      "src": "https://via.placeholder.com/512",
+      "src": "assets/icon/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "assets/icon/icon-512.png",
       "sizes": "512x512",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "any"
+    },
+    {
+      "src": "assets/icon/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "assets/icon/ss1.png",
+      "sizes": "1080x1920",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "CoinLence Dashboard"
+    },
+    {
+      "src": "assets/icon/ss2.png",
+      "sizes": "1080x1920",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "Analytics View"
+    },
+    {
+      "src": "assets/icon/ss3.png",
+      "sizes": "1080x1920",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "Transaction History"
+    },
+    {
+      "src": "assets/icon/ss4.png",
+      "sizes": "1080x1920",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "Settings & Security"
     }
   ]
 }
