@@ -1,0 +1,1370 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, viewport-fit=cover" />
+<meta name="theme-color" content="#0b1220" />
+<meta name="description" content="CoinLence — Premium offline-first personal finance tracker with PIN security, smart analytics, and monthly reports." />
+<meta name="keywords" content="CoinLence, finance tracker, PWA, offline finance, expense tracker, income, lend, borrow, BDT" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="CoinLence" />
+<meta property="og:title" content="CoinLence" />
+<meta property="og:description" content="Premium offline-first personal finance tracker." />
+<meta property="og:type" content="website" />
+<meta property="og:image" content="https://via.placeholder.com/512" />
+<link rel="manifest" href="manifest.json" />
+<link rel="icon" href="https://via.placeholder.com/192" />
+<link rel="apple-touch-icon" href="https://via.placeholder.com/192" />
+<link rel="stylesheet" href="style.css" />
+<title>CoinLence</title>
+
+<!-- ================================================================
+     NEW: Firebase Integration Styles
+     These ONLY affect new Firebase UI elements.
+     Your existing style.css is completely untouched.
+     ================================================================ -->
+<style>
+  /* ---- Sync Status Indicator (header) ---- */
+  .cl-sync-status {
+    display: none; /* shown via JS when user is logged in */
+    align-items: center;
+    gap: 4px;
+    font-size: 11px;
+    padding: 3px 8px;
+    border-radius: 12px;
+    background: rgba(255,255,255,0.08);
+    color: var(--text-muted, #8896a5);
+    white-space: nowrap;
+    transition: background 0.3s, color 0.3s;
+  }
+  .cl-sync-status[data-status="synced"]  { color: #2ecc71; }
+  .cl-sync-status[data-status="syncing"] { color: #ffb547; animation: cl-pulse 1.2s infinite; }
+  .cl-sync-status[data-status="offline"] { color: #8896a5; }
+  .cl-sync-status[data-status="error"]   { color: #ff5c5c; }
+  @keyframes cl-pulse { 0%,100% { opacity:1; } 50% { opacity:0.4; } }
+
+  /* ---- Google User Avatar (header) ---- */
+  .cl-header-avatar {
+    display: none; /* shown via JS when logged in */
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 2px solid rgba(255,255,255,0.2);
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+
+  /* ---- Google Sign-In Button ---- */
+  .cl-google-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    background: #fff;
+    color: #3c4043;
+    border: 1px solid #dadce0;
+    font-weight: 600;
+    font-size: 14px;
+    padding: 10px 16px;
+    border-radius: 8px;
+    cursor: pointer;
+    width: 100%;
+    margin-bottom: 8px;
+    transition: box-shadow 0.2s;
+  }
+  .cl-google-btn:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.18); }
+  .cl-google-btn svg { flex-shrink: 0; }
+
+  /* ---- Logged-In User Info Block ---- */
+  .cl-user-info {
+    display: none; /* shown via JS */
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    background: rgba(255,255,255,0.06);
+    border-radius: 10px;
+    margin-bottom: 10px;
+  }
+  .cl-user-avatar {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    object-fit: cover;
+    flex-shrink: 0;
+    border: 2px solid rgba(255,255,255,0.15);
+  }
+  .cl-user-text { flex: 1; min-width: 0; }
+  .cl-user-text strong {
+    display: block;
+    font-size: 14px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .cl-user-text small {
+    font-size: 11px;
+    opacity: 0.6;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: block;
+  }
+
+  /* ---- Sync Action Buttons ---- */
+  .cl-sync-actions { display: flex; gap: 8px; margin-top: 6px; }
+  .cl-sync-actions .btn { flex: 1; font-size: 13px; }
+
+  /* ---- Last Sync Time ---- */
+  .cl-last-sync {
+    display: block;
+    font-size: 11px;
+    text-align: center;
+    margin-top: 8px;
+    opacity: 0.5;
+  }
+
+  /* ---- Cloud Sync Notice ---- */
+  .cl-notice {
+    font-size: 12px;
+    opacity: 0.55;
+    margin-top: 6px;
+    line-height: 1.5;
+  }
+
+  /* ---- Section divider inside settings card ---- */
+  .cl-divider {
+    border: none;
+    border-top: 1px solid rgba(255,255,255,0.07);
+    margin: 10px 0;
+  }
+</style>
+</head>
+
+<body data-theme="dark">
+
+<!-- ============== SPLASH ============== -->
+<div id="splash" class="splash">
+  <div class="splash-logo">৳</div>
+  <h1>CoinLence</h1>
+  <p>Loading your finances…</p>
+</div>
+
+<!-- ============== SETUP (FIRST RUN) ============== -->
+<section id="setupScreen" class="auth-screen hidden">
+  <div class="auth-card">
+    <div class="auth-logo">৳</div>
+    <h2>Welcome to CoinLence</h2>
+    <p class="muted">Set up your security to begin.</p>
+
+    <div class="form-group">
+      <label>Choose PIN length</label>
+      <div class="pill-group" id="pinLengthGroup">
+        <button class="pill active" data-len="4">4-digit</button>
+        <button class="pill" data-len="6">6-digit</button>
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label for="setupPin">Create PIN</label>
+      <input type="password" inputmode="numeric" id="setupPin" placeholder="Enter PIN" maxlength="6" autocomplete="off" />
+    </div>
+
+    <div class="form-group">
+      <label for="setupPinConfirm">Confirm PIN</label>
+      <input type="password" inputmode="numeric" id="setupPinConfirm" placeholder="Re-enter PIN" maxlength="6" autocomplete="off" />
+    </div>
+
+    <div class="form-group">
+      <label for="setupRecovery">Master Recovery Key</label>
+      <input type="text" id="setupRecovery" placeholder="A secret phrase you will remember" autocomplete="off" />
+      <small class="muted">⚠ This will not be shown again. Save it somewhere safe.</small>
+    </div>
+
+    <button class="btn btn-primary btn-block" id="setupSubmit">Create Account</button>
+  </div>
+</section>
+
+<!-- ============== LOCK ============== -->
+<section id="lockScreen" class="auth-screen hidden">
+  <div class="auth-card">
+    <div class="auth-logo">৳</div>
+    <h2>CoinLence</h2>
+    <p class="muted">Enter your PIN to unlock</p>
+
+    <div class="pin-dots" id="pinDots"></div>
+
+    <input type="password" inputmode="numeric" id="lockPin" maxlength="6" autocomplete="off" class="pin-input" />
+
+    <div id="lockError" class="error-text"></div>
+
+    <button class="btn btn-primary btn-block" id="unlockBtn">Unlock</button>
+    <button class="btn btn-ghost btn-block" id="forgotPinBtn">Forgot PIN?</button>
+  </div>
+</section>
+
+<!-- ============== RECOVERY ============== -->
+<section id="recoveryScreen" class="auth-screen hidden">
+  <div class="auth-card">
+    <div class="auth-logo">🔑</div>
+    <h2>Recover Access</h2>
+    <p class="muted">Enter your master recovery key to reset PIN.</p>
+
+    <div class="form-group">
+      <label for="recoveryKeyInput">Recovery Key</label>
+      <input type="text" id="recoveryKeyInput" placeholder="Your secret recovery key" autocomplete="off" />
+    </div>
+
+    <div class="form-group">
+      <label for="recoveryNewPin">New PIN</label>
+      <input type="password" inputmode="numeric" id="recoveryNewPin" maxlength="6" placeholder="New PIN" autocomplete="off" />
+    </div>
+
+    <div class="form-group">
+      <label for="recoveryNewPinConfirm">Confirm New PIN</label>
+      <input type="password" inputmode="numeric" id="recoveryNewPinConfirm" maxlength="6" placeholder="Confirm New PIN" autocomplete="off" />
+    </div>
+
+    <button class="btn btn-primary btn-block" id="recoverySubmit">Reset PIN</button>
+    <button class="btn btn-ghost btn-block" id="recoveryCancel">Back</button>
+  </div>
+</section>
+
+<!-- ============== MAIN APP ============== -->
+<main id="app" class="hidden">
+
+  <!-- HEADER -->
+  <!-- NEW: Added clSyncStatus and clHeaderAvatar to header-actions.
+       Everything else here is ORIGINAL and UNTOUCHED. -->
+  <header class="app-header">
+    <div class="brand">
+      <span class="brand-mark">৳</span>
+      <span class="brand-name">CoinLence</span>
+    </div>
+    <div class="header-actions">
+      <!-- NEW: Sync status badge — hidden until user logs in -->
+      <span class="cl-sync-status" id="clSyncStatus" title="Cloud sync status"></span>
+      <!-- NEW: User avatar in header — hidden until user logs in -->
+      <img class="cl-header-avatar" id="clHeaderAvatar" alt="Account" title="View cloud sync settings" />
+      <!-- ORIGINAL buttons below — completely untouched -->
+      <button class="icon-btn" id="themeToggle" aria-label="Toggle theme">🌙</button>
+      <button class="icon-btn" id="lockNowBtn" aria-label="Lock app">🔒</button>
+    </div>
+  </header>
+
+  <!-- VIEWS -->
+
+  <!-- DASHBOARD — ORIGINAL, UNTOUCHED -->
+  <section class="view active" id="view-dashboard">
+    <div class="balance-card" id="balanceCard">
+      <p class="bc-label">Total Balance</p>
+      <h1 class="bc-amount" id="totalBalance">৳0.00</h1>
+      <div class="bc-row">
+        <div><span>Income</span><strong id="totalIncome">৳0.00</strong></div>
+        <div><span>Expense</span><strong id="totalExpense">৳0.00</strong></div>
+      </div>
+      <div class="bc-row">
+        <div><span>Lend</span><strong id="totalLend">৳0.00</strong></div>
+        <div><span>Borrow</span><strong id="totalBorrow">৳0.00</strong></div>
+      </div>
+    </div>
+
+    <div class="quick-actions">
+      <button class="qa qa-income" data-type="income">＋ Income</button>
+      <button class="qa qa-expense" data-type="expense">－ Expense</button>
+      <button class="qa qa-lend" data-type="lend">↗ Lend</button>
+      <button class="qa qa-borrow" data-type="borrow">↘ Borrow</button>
+    </div>
+
+    <div class="section-title">
+      <h3>Monthly Overview</h3>
+      <span id="monthLabel"></span>
+    </div>
+    <div class="card chart-card">
+      <canvas id="chartMonthly"></canvas>
+    </div>
+
+    <div class="section-title">
+      <h3>Recent Transactions</h3>
+      <button class="link-btn" data-nav="history">See all</button>
+    </div>
+    <div id="recentList" class="tx-list"></div>
+  </section>
+
+  <!-- HISTORY — ORIGINAL, UNTOUCHED -->
+  <section class="view" id="view-history">
+    <h2 class="view-title">Transaction History</h2>
+
+    <div class="filters">
+      <input type="search" id="searchInput" placeholder="🔍 Search..." />
+      <div class="filter-row">
+        <select id="filterType">
+          <option value="all">All Types</option>
+          <option value="income">Income</option>
+          <option value="expense">Expense</option>
+          <option value="lend">Lend</option>
+          <option value="borrow">Borrow</option>
+        </select>
+        <select id="filterMonth"></select>
+        <select id="filterYear"></select>
+      </div>
+    </div>
+
+    <div id="historyList" class="tx-list"></div>
+  </section>
+
+  <!-- ANALYTICS — ORIGINAL, UNTOUCHED -->
+  <section class="view" id="view-analytics">
+    <h2 class="view-title">Analytics</h2>
+
+    <div class="card chart-card">
+      <h4>Income vs Expense</h4>
+      <canvas id="chartIncomeExpense"></canvas>
+    </div>
+
+    <div class="card chart-card">
+      <h4>Expense Breakdown</h4>
+      <canvas id="chartExpenseBreakdown"></canvas>
+    </div>
+
+    <div class="card chart-card">
+      <h4>Lend vs Borrow</h4>
+      <canvas id="chartLendBorrow"></canvas>
+    </div>
+
+    <div class="card chart-card">
+      <h4>Monthly Trend</h4>
+      <canvas id="chartMonthlyTrend"></canvas>
+    </div>
+  </section>
+
+  <!-- SETTINGS — ORIGINAL cards UNTOUCHED. NEW Cloud Sync card inserted before About. -->
+  <section class="view" id="view-settings">
+    <h2 class="view-title">Settings</h2>
+
+    <!-- ORIGINAL: Appearance card — UNTOUCHED -->
+    <div class="card settings-card">
+      <h4>Appearance</h4>
+      <div class="setting-row">
+        <span>Dark Mode</span>
+        <label class="switch">
+          <input type="checkbox" id="darkSwitch" checked />
+          <span class="slider"></span>
+        </label>
+      </div>
+    </div>
+
+    <!-- ORIGINAL: Categories card — UNTOUCHED -->
+    <div class="card settings-card">
+      <h4>Categories</h4>
+      <div id="categoryList" class="chip-list"></div>
+      <div class="row-flex">
+        <input type="text" id="newCategory" placeholder="New category name" />
+        <button class="btn btn-primary" id="addCategoryBtn">Add</button>
+      </div>
+    </div>
+
+    <!-- ORIGINAL: Security card — UNTOUCHED -->
+    <div class="card settings-card">
+      <h4>Security</h4>
+      <button class="btn btn-block" id="changePinBtn">Change PIN</button>
+      <button class="btn btn-block" id="resetRecoveryBtn">Reset Recovery Key</button>
+    </div>
+
+    <!-- ORIGINAL: Backup & Data card — UNTOUCHED -->
+    <div class="card settings-card">
+      <h4>Backup &amp; Data</h4>
+      <button class="btn btn-block" id="exportBtn">Export Backup (JSON)</button>
+      <button class="btn btn-block" id="importBtn">Import Backup</button>
+      <input type="file" id="importFile" accept="application/json" hidden />
+      <button class="btn btn-block btn-danger" id="clearDataBtn">Clear All Data</button>
+    </div>
+
+    <!-- ================================================================
+         NEW: Cloud Sync Card
+         Inserted here — between Backup and About.
+         All existing cards above are ORIGINAL and UNTOUCHED.
+         ================================================================ -->
+    <div class="card settings-card" id="clCloudCard">
+      <h4>☁️ Cloud Sync</h4>
+
+      <!-- Google Sign-In Button (shown when logged out) -->
+      <button class="cl-google-btn" id="clGoogleLoginBtn" style="display:none">
+        <!-- Google G logo SVG -->
+        <svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true">
+          <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
+          <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
+          <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
+          <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.18 1.48-4.97 2.31-8.16 2.31-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
+        </svg>
+        Sign in with Google
+      </button>
+
+      <!-- Logged-In User Info (shown when logged in) -->
+      <div class="cl-user-info" id="clUserInfo">
+        <img class="cl-user-avatar" id="clUserAvatar" alt="User avatar" />
+        <div class="cl-user-text">
+          <strong id="clUserName">User</strong>
+          <small id="clUserEmail"></small>
+        </div>
+      </div>
+
+      <!-- Sync Action Buttons -->
+      <div class="cl-sync-actions" id="clSyncActions" style="display:none">
+        <button class="btn" id="clManualBackupBtn" title="Push local data to Firebase now">☁️ Backup</button>
+        <button class="btn" id="clManualRestoreBtn" title="Pull data from Firebase to this device">⬇️ Restore</button>
+        <button class="btn btn-ghost" id="clGoogleLogoutBtn" title="Sign out of Google">Sign Out</button>
+      </div>
+
+      <hr class="cl-divider" />
+
+      <!-- Last sync timestamp -->
+      <small class="cl-last-sync" id="clLastSyncTime"></small>
+
+      <!-- Guidance note -->
+      <p class="cl-notice muted">
+        ☁️ Your financial data is always saved locally first. Google sync is a secure backup layer.
+        PIN and security settings are never uploaded to the cloud.
+      </p>
+    </div>
+    <!-- END NEW Cloud Sync Card -->
+
+    <!-- ORIGINAL: About card — UNTOUCHED -->
+    <div class="card settings-card">
+      <h4>About</h4>
+      <p><strong>App:</strong> CoinLence</p>
+      <p><strong>Version:</strong> 2.0</p>
+      <p><strong>Developer:</strong> Saifullah</p>
+      <p><strong>Institution:</strong> ALDC</p>
+      <p><strong>Contact:</strong> mdsaifullahnahid001@gmail.com</p>
+    </div>
+  </section>
+
+  <!-- BOTTOM NAV — ORIGINAL, UNTOUCHED -->
+  <nav class="bottom-nav">
+    <button class="nav-btn active" data-nav="dashboard"><span>🏠</span><small>Home</small></button>
+    <button class="nav-btn" data-nav="history"><span>📜</span><small>History</small></button>
+    <button class="nav-btn fab" id="fabAdd"><span>＋</span></button>
+    <button class="nav-btn" data-nav="analytics"><span>📊</span><small>Analytics</small></button>
+    <button class="nav-btn" data-nav="settings"><span>⚙️</span><small>Settings</small></button>
+  </nav>
+</main>
+
+<!-- ============== TX MODAL — ORIGINAL, UNTOUCHED ============== -->
+<div class="modal-backdrop hidden" id="txModal">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 id="txModalTitle">Add Transaction</h3>
+      <button class="icon-btn" id="txModalClose">✕</button>
+    </div>
+    <form id="txForm" class="modal-body">
+      <input type="hidden" id="txId" />
+      <div class="form-group">
+        <label>Type</label>
+        <div class="pill-group" id="txTypeGroup">
+          <button type="button" class="pill active" data-type="income">Income</button>
+          <button type="button" class="pill" data-type="expense">Expense</button>
+          <button type="button" class="pill" data-type="lend">Lend</button>
+          <button type="button" class="pill" data-type="borrow">Borrow</button>
+        </div>
+      </div>
+      <div class="form-group">
+        <label for="txTitle">Title</label>
+        <input type="text" id="txTitle" required maxlength="80" />
+      </div>
+      <div class="form-group">
+        <label for="txAmount">Amount (৳)</label>
+        <input type="number" id="txAmount" step="0.01" min="0.01" required />
+      </div>
+      <div class="form-group">
+        <label for="txCategory">Category</label>
+        <select id="txCategory" required></select>
+      </div>
+      <div class="form-group">
+        <label for="txDate">Date</label>
+        <input type="date" id="txDate" required />
+      </div>
+      <div class="form-group">
+        <label for="txNotes">Notes</label>
+        <textarea id="txNotes" rows="2" maxlength="200"></textarea>
+      </div>
+      <button type="submit" class="btn btn-primary btn-block">Save</button>
+    </form>
+  </div>
+</div>
+
+<!-- ============== CONFIRM MODAL — ORIGINAL, UNTOUCHED ============== -->
+<div class="modal-backdrop hidden" id="confirmModal">
+  <div class="modal modal-sm">
+    <div class="modal-header">
+      <h3 id="confirmTitle">Are you sure?</h3>
+    </div>
+    <div class="modal-body">
+      <p id="confirmMessage" class="muted">This action cannot be undone.</p>
+      <div class="row-flex">
+        <button class="btn btn-ghost" id="confirmCancel">Cancel</button>
+        <button class="btn btn-danger" id="confirmOk">Confirm</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============== PIN MODAL (change) — ORIGINAL, UNTOUCHED ============== -->
+<div class="modal-backdrop hidden" id="pinModal">
+  <div class="modal modal-sm">
+    <div class="modal-header">
+      <h3>Change PIN</h3>
+      <button class="icon-btn" id="pinModalClose">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label>Current PIN</label>
+        <input type="password" inputmode="numeric" id="pinCurrent" maxlength="6" />
+      </div>
+      <div class="form-group">
+        <label>New PIN length</label>
+        <div class="pill-group" id="pinNewLenGroup">
+          <button type="button" class="pill active" data-len="4">4-digit</button>
+          <button type="button" class="pill" data-len="6">6-digit</button>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>New PIN</label>
+        <input type="password" inputmode="numeric" id="pinNew" maxlength="6" />
+      </div>
+      <div class="form-group">
+        <label>Confirm New PIN</label>
+        <input type="password" inputmode="numeric" id="pinNewConfirm" maxlength="6" />
+      </div>
+      <button class="btn btn-primary btn-block" id="pinSaveBtn">Update PIN</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============== RECOVERY RESET MODAL — ORIGINAL, UNTOUCHED ============== -->
+<div class="modal-backdrop hidden" id="recoveryResetModal">
+  <div class="modal modal-sm">
+    <div class="modal-header">
+      <h3>Reset Recovery Key</h3>
+      <button class="icon-btn" id="recoveryResetClose">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label>Current PIN</label>
+        <input type="password" inputmode="numeric" id="rrCurrentPin" maxlength="6" />
+      </div>
+      <div class="form-group">
+        <label>New Recovery Key</label>
+        <input type="text" id="rrNewKey" />
+        <small class="muted">⚠ Will not be shown again. Save it.</small>
+      </div>
+      <button class="btn btn-primary btn-block" id="rrSaveBtn">Save Recovery Key</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============== TOASTS — ORIGINAL, UNTOUCHED ============== -->
+<div id="toastContainer" class="toast-container"></div>
+
+<!-- ================================================================
+     NEW: Firebase Integration Script
+     ──────────────────────────────────────────────────────────────
+     Placed BEFORE script.js so it can intercept IndexedDB.open()
+     before the main app opens the database.
+
+     This script uses dynamic import() to load Firebase ESM modules
+     from the official CDN. No build step required.
+
+     Architecture:
+       IndexedDB (primary, app-managed)
+           ↓  intercepted write events
+       Firebase Sync Engine (this script)
+           ↓  debounced 2s after any write
+       Cloud Firestore (backup + restore layer)
+
+     Nothing in script.js is modified.
+     ================================================================ -->
+<script>
+/* =================================================================
+   CoinLence — Firebase Cloud Sync Layer  v1.0
+   Author: Integrated by Claude (Anthropic) for CoinLence by Saifullah
+   =================================================================
+
+   ⚙️  HOW TO CONFIGURE:
+   1. Go to https://console.firebase.google.com
+   2. Create a project (or open existing one)
+   3. Project Settings → General → Your Apps → Add Web App
+   4. Copy the firebaseConfig object and paste below
+   5. Enable "Authentication" → Sign-in Method → Google
+   6. Enable "Firestore Database" (start in production mode)
+   7. Deploy the Firestore Security Rules shown at the bottom
+      of this script as a comment.
+
+   ================================================================= */
+
+(function () {
+  'use strict';
+
+  /* ──────────────────────────────────────────────────────────────
+     STEP 1 ► PASTE YOUR FIREBASE CONFIG HERE
+     ────────────────────────────────────────────────────────────── */
+  var FIREBASE_CONFIG = {
+    apiKey:            "PASTE_YOUR_API_KEY_HERE",
+    authDomain:        "YOUR_PROJECT_ID.firebaseapp.com",
+    projectId:         "YOUR_PROJECT_ID",
+    storageBucket:     "YOUR_PROJECT_ID.appspot.com",
+    messagingSenderId: "YOUR_SENDER_ID",
+    appId:             "YOUR_APP_ID"
+  };
+
+  /* ──────────────────────────────────────────────────────────────
+     CONSTANTS — must exactly match script.js constants
+     ────────────────────────────────────────────────────────────── */
+  var DB_NAME    = 'coinlence_db';   // same as script.js
+  var DB_VERSION = 1;                // same as script.js
+  var STORES     = { TX: 'transactions', CATS: 'categories', META: 'meta' };
+
+  /* ──────────────────────────────────────────────────────────────
+     Firebase CDN — modular SDK v10 (ESM, dynamic import)
+     ────────────────────────────────────────────────────────────── */
+  var FB_VER = '10.12.0';
+  var FB_BASE = 'https://www.gstatic.com/firebasejs/' + FB_VER + '/';
+
+  /* ──────────────────────────────────────────────────────────────
+     INTERNAL STATE
+     ────────────────────────────────────────────────────────────── */
+  var firebaseApp  = null;
+  var auth         = null;
+  var db           = null;   // Firestore instance
+  var currentUser  = null;
+
+  var appIdb       = null;   // IDBDatabase reference (intercepted)
+  var syncTimer    = null;   // debounce timer
+  var isSyncing    = false;
+  var pendingSync  = false;  // queued while offline or mid-sync
+
+  /* ──────────────────────────────────────────────────────────────
+     META KEYS NEVER SYNCED TO CLOUD
+     (PIN hashes, lock state — security stays local-only)
+     ────────────────────────────────────────────────────────────── */
+  var LOCAL_ONLY_META = [
+    'pinHash', 'pinLength', 'recoveryHash',
+    'failedAttempts', 'lockUntil', 'lastBackupPrompt'
+  ];
+
+  /* =================================================================
+     SECTION A: IndexedDB INTERCEPTION
+     We wrap indexedDB.open() BEFORE script.js runs.
+     This gives us a reference to the app's IDBDatabase instance
+     and lets us hook into every readwrite transaction.
+     ================================================================= */
+
+  (function interceptIndexedDB() {
+    var _origOpen = indexedDB.open.bind(indexedDB);
+
+    indexedDB.open = function (name, version) {
+      var req = _origOpen(name, version);
+
+      if (name === DB_NAME) {
+        /* Capture the DB instance and wrap db.transaction */
+        req.addEventListener('success', function (e) {
+          var idb = e.target.result;
+          appIdb = idb;
+
+          /* Wrap db.transaction so every readwrite completion
+             triggers a debounced Firebase sync */
+          var _origTx = idb.transaction.bind(idb);
+          idb.transaction = function (storeNames, mode) {
+            var tx = _origTx(storeNames, mode);
+            if (mode === 'readwrite') {
+              tx.addEventListener('complete', function () {
+                scheduleSyncToFirebase();
+              });
+            }
+            return tx;
+          };
+        });
+      }
+
+      return req;
+    };
+  })();
+
+  /* ──────────────────────────────────────────────────────────────
+     Also intercept localStorage.setItem for the fallback path.
+     script.js uses localStorage when IndexedDB is unavailable.
+     ────────────────────────────────────────────────────────────── */
+  (function interceptLocalStorage() {
+    var _origSet = localStorage.setItem.bind(localStorage);
+    localStorage.setItem = function (key, value) {
+      _origSet(key, value);
+      /* Trigger sync only for coinlence app data, not our own keys */
+      if (
+        key.startsWith('coinlence_') &&
+        !key.startsWith('_cl_')
+      ) {
+        scheduleSyncToFirebase();
+      }
+    };
+  })();
+
+  /* =================================================================
+     SECTION B: SYNC STATUS UI
+     ================================================================= */
+
+  function setSyncStatus(status) {
+    /* status: 'synced' | 'syncing' | 'offline' | 'error' | 'hidden' */
+    var el = document.getElementById('clSyncStatus');
+    if (!el) return;
+    if (status === 'hidden') {
+      el.style.display = 'none';
+      return;
+    }
+    var map = {
+      synced:  { icon: '☁️', text: 'Synced' },
+      syncing: { icon: '🔄', text: 'Syncing…' },
+      offline: { icon: '📴', text: 'Offline' },
+      error:   { icon: '⚠️', text: 'Sync Error' }
+    };
+    var info = map[status] || map.synced;
+    el.dataset.status = status;
+    el.textContent = info.icon + ' ' + info.text;
+    el.style.display = 'flex';
+  }
+
+  function updateLastSyncUI(timestamp) {
+    var el = document.getElementById('clLastSyncTime');
+    if (!el || !timestamp) return;
+    var d = new Date(timestamp);
+    el.textContent = 'Last synced: ' + d.toLocaleString();
+  }
+
+  /* =================================================================
+     SECTION C: IDB HELPERS (reads/writes bypassing app's IIFE scope)
+     We must use the same _b64 encoding that script.js uses.
+     ================================================================= */
+
+  /** Encode exactly as script.js b64Encode() does */
+  function _b64Enc(str) {
+    try { return btoa(unescape(encodeURIComponent(str))); }
+    catch (e) { return btoa(str); }
+  }
+
+  /** Decode exactly as script.js b64Decode() does */
+  function _b64Dec(str) {
+    try { return decodeURIComponent(escape(atob(str))); }
+    catch (e) {
+      try { return atob(str); } catch (_) { return null; }
+    }
+  }
+
+  /** Return the keyPath for a given store name */
+  function _keyPath(store) {
+    return store === STORES.META ? 'key' : 'id';
+  }
+
+  /**
+   * Read all decoded records from a store.
+   * Falls back to localStorage if IndexedDB isn't available yet.
+   */
+  function idbGetAll(store) {
+    /* IDB path */
+    if (appIdb) {
+      return new Promise(function (resolve, reject) {
+        try {
+          var tx  = appIdb.transaction(store, 'readonly');
+          var os  = tx.objectStore(store);
+          var req = os.getAll();
+          req.onsuccess = function () {
+            var items = (req.result || []).map(function (rec) {
+              if (rec && rec._b64) {
+                var dec = _b64Dec(rec._b64);
+                try { return dec ? JSON.parse(dec) : null; } catch (e) { return null; }
+              }
+              return rec;
+            }).filter(Boolean);
+            resolve(items);
+          };
+          req.onerror = function () { reject(req.error); };
+        } catch (err) { reject(err); }
+      });
+    }
+
+    /* localStorage fallback path */
+    try {
+      var raw = localStorage.getItem('coinlence_' + store);
+      if (!raw) return Promise.resolve([]);
+      var dec = _b64Dec(raw);
+      if (!dec) return Promise.resolve([]);
+      var arr = JSON.parse(dec);
+      return Promise.resolve(Array.isArray(arr) ? arr : []);
+    } catch (e) {
+      return Promise.resolve([]);
+    }
+  }
+
+  /**
+   * Write a decoded object back using the same _b64 wrapping.
+   * Only used during RESTORE — normal writes happen through script.js.
+   */
+  function idbPutDecoded(store, obj) {
+    var kp = _keyPath(store);
+
+    /* IDB path */
+    if (appIdb) {
+      return new Promise(function (resolve, reject) {
+        try {
+          var wrapped = {};
+          wrapped[kp] = obj[kp];
+          wrapped._b64 = _b64Enc(JSON.stringify(obj));
+          var tx  = appIdb.transaction(store, 'readwrite');
+          var os  = tx.objectStore(store);
+          var req = os.put(wrapped);
+          req.onsuccess = function () { resolve(true); };
+          req.onerror   = function () { reject(req.error); };
+        } catch (err) { reject(err); }
+      });
+    }
+
+    /* localStorage fallback path */
+    return idbGetAll(store).then(function (all) {
+      var idx = all.findIndex(function (x) { return x[kp] === obj[kp]; });
+      if (idx >= 0) all[idx] = obj; else all.push(obj);
+      localStorage.setItem('coinlence_' + store, _b64Enc(JSON.stringify(all)));
+      return true;
+    });
+  }
+
+  /**
+   * Clear all records in a store.
+   * Only used during RESTORE.
+   */
+  function idbClear(store) {
+    if (appIdb) {
+      return new Promise(function (resolve, reject) {
+        try {
+          var tx  = appIdb.transaction(store, 'readwrite');
+          var os  = tx.objectStore(store);
+          var req = os.clear();
+          req.onsuccess = function () { resolve(); };
+          req.onerror   = function () { reject(req.error); };
+        } catch (err) { reject(err); }
+      });
+    }
+    localStorage.removeItem('coinlence_' + store);
+    return Promise.resolve();
+  }
+
+  /**
+   * Wait until the app has opened IndexedDB (max 8 s).
+   */
+  function waitForIdb() {
+    return new Promise(function (resolve) {
+      if (appIdb) { resolve(); return; }
+      var t0    = Date.now();
+      var timer = setInterval(function () {
+        if (appIdb || Date.now() - t0 > 8000) {
+          clearInterval(timer);
+          resolve();
+        }
+      }, 80);
+    });
+  }
+
+  /* =================================================================
+     SECTION D: FIREBASE SYNC ENGINE
+     ================================================================= */
+
+  /** Debounce: schedule a sync 2 s after the last write */
+  function scheduleSyncToFirebase() {
+    if (!currentUser || !db) return; /* Not logged in — skip */
+    if (syncTimer) clearTimeout(syncTimer);
+    syncTimer = setTimeout(function () {
+      doSyncToFirebase().catch(function (err) {
+        console.warn('[CoinLence Firebase] Sync error:', err);
+        setSyncStatus('error');
+      });
+    }, 2000);
+  }
+
+  /**
+   * Read all local data and push it to Firestore.
+   * Local data is ALWAYS the source of truth.
+   */
+  async function doSyncToFirebase() {
+    if (!currentUser || !db) return;
+
+    /* Queue if already syncing */
+    if (isSyncing) { pendingSync = true; return; }
+
+    if (!navigator.onLine) {
+      setSyncStatus('offline');
+      pendingSync = true;
+      return;
+    }
+
+    isSyncing = true;
+    setSyncStatus('syncing');
+
+    try {
+      var { doc, setDoc } = await import(FB_BASE + 'firebase-firestore.js');
+
+      /* Read all three stores in parallel */
+      var results = await Promise.all([
+        idbGetAll(STORES.TX),
+        idbGetAll(STORES.CATS),
+        idbGetAll(STORES.META)
+      ]);
+      var transactions = results[0];
+      var categories   = results[1];
+      var meta         = results[2];
+
+      /* Strip LOCAL_ONLY_META entries from cloud payload */
+      var cloudMeta = meta.filter(function (m) {
+        return LOCAL_ONLY_META.indexOf(m.key) === -1;
+      });
+
+      /* Safety check: prevent uploading empty data if reads failed */
+      if (transactions.length === 0 && meta.length === 0) {
+        /* Possibly the DB isn't ready yet — skip this cycle */
+        isSyncing = false;
+        return;
+      }
+
+      var payload = {
+        transactions: transactions,
+        categories:   categories,
+        meta:         cloudMeta,
+        syncedAt:     Date.now(),
+        deviceId:     getDeviceId(),
+        appVersion:   '2.0'
+      };
+
+      var docRef = doc(db, 'users', currentUser.uid, 'appData', 'main');
+      await setDoc(docRef, payload);
+
+      var now = Date.now();
+      setSyncStatus('synced');
+      updateLastSyncUI(now);
+      localStorage.setItem('_cl_last_sync_' + currentUser.uid, String(now));
+      pendingSync = false;
+
+    } catch (err) {
+      setSyncStatus('error');
+      throw err;
+    } finally {
+      isSyncing = false;
+      /* Run any queued sync that came in while we were busy */
+      if (pendingSync && navigator.onLine) {
+        pendingSync = false;
+        setTimeout(doSyncToFirebase, 1000);
+      }
+    }
+  }
+
+  /**
+   * Pull Firestore data and restore it to local IndexedDB.
+   * PIN / security settings are NEVER restored (LOCAL_ONLY_META).
+   * Returns true if data was found and written.
+   */
+  async function doRestoreFromFirebase() {
+    if (!currentUser || !db) return false;
+
+    setSyncStatus('syncing');
+
+    try {
+      var { doc, getDoc } = await import(FB_BASE + 'firebase-firestore.js');
+
+      var docRef = doc(db, 'users', currentUser.uid, 'appData', 'main');
+      var snap   = await getDoc(docRef);
+
+      if (!snap.exists()) {
+        setSyncStatus('synced');
+        return false;
+      }
+
+      var data = snap.data();
+      if (!data || !Array.isArray(data.transactions)) {
+        setSyncStatus('synced');
+        return false;
+      }
+
+      /* Wait for the app to have opened IndexedDB */
+      await waitForIdb();
+
+      /* --- Restore transactions --- */
+      await idbClear(STORES.TX);
+      for (var i = 0; i < data.transactions.length; i++) {
+        await idbPutDecoded(STORES.TX, data.transactions[i]);
+      }
+
+      /* --- Restore categories --- */
+      await idbClear(STORES.CATS);
+      for (var j = 0; j < (data.categories || []).length; j++) {
+        await idbPutDecoded(STORES.CATS, data.categories[j]);
+      }
+
+      /* --- Restore meta (skip security fields) --- */
+      for (var k = 0; k < (data.meta || []).length; k++) {
+        var m = data.meta[k];
+        if (LOCAL_ONLY_META.indexOf(m.key) === -1) {
+          await idbPutDecoded(STORES.META, m);
+        }
+      }
+
+      setSyncStatus('synced');
+      return true;
+
+    } catch (err) {
+      console.error('[CoinLence Firebase] Restore error:', err);
+      setSyncStatus('error');
+      return false;
+    }
+  }
+
+  /* =================================================================
+     SECTION E: DEVICE ID
+     ================================================================= */
+  function getDeviceId() {
+    var k  = '_cl_device_id';
+    var id = localStorage.getItem(k);
+    if (!id) {
+      id = Date.now().toString(36) + Math.random().toString(36).slice(2);
+      localStorage.setItem(k, id);
+    }
+    return id;
+  }
+
+  /* =================================================================
+     SECTION F: TOAST HELPER
+     Uses the existing #toastContainer from the original HTML.
+     ================================================================= */
+  function clToast(msg, type) {
+    type = type || 'info';
+    var c = document.getElementById('toastContainer');
+    if (!c) return;
+    var el = document.createElement('div');
+    el.className = 'toast ' + type;
+    el.textContent = msg;
+    c.appendChild(el);
+    setTimeout(function () {
+      el.classList.add('hide');
+      setTimeout(function () { el.remove(); }, 250);
+    }, 3000);
+  }
+
+  /* =================================================================
+     SECTION G: UI UPDATE HELPERS
+     ================================================================= */
+
+  function updateUserUI(user) {
+    var loginBtn    = document.getElementById('clGoogleLoginBtn');
+    var logoutBtn   = document.getElementById('clGoogleLogoutBtn');
+    var syncActions = document.getElementById('clSyncActions');
+    var userInfo    = document.getElementById('clUserInfo');
+    var userAvatar  = document.getElementById('clUserAvatar');
+    var userName    = document.getElementById('clUserName');
+    var userEmail   = document.getElementById('clUserEmail');
+    var headerAvatar = document.getElementById('clHeaderAvatar');
+
+    if (user) {
+      if (loginBtn)    loginBtn.style.display    = 'none';
+      if (logoutBtn)   logoutBtn.style.display   = 'inline-flex';
+      if (syncActions) syncActions.style.display = 'flex';
+      if (userInfo)    userInfo.style.display     = 'flex';
+      if (userAvatar && user.photoURL) {
+        userAvatar.src = user.photoURL;
+        userAvatar.onerror = function () { this.src = ''; };
+      }
+      if (userName)    userName.textContent  = user.displayName || 'User';
+      if (userEmail)   userEmail.textContent = user.email || '';
+      if (headerAvatar) {
+        headerAvatar.src          = user.photoURL || '';
+        headerAvatar.style.display = 'block';
+        headerAvatar.onerror       = function () { this.style.display = 'none'; };
+      }
+      /* Restore last-sync label from localStorage */
+      var stored = localStorage.getItem('_cl_last_sync_' + user.uid);
+      if (stored) updateLastSyncUI(parseInt(stored, 10));
+
+    } else {
+      if (loginBtn)    loginBtn.style.display    = 'inline-flex';
+      if (logoutBtn)   logoutBtn.style.display   = 'none';
+      if (syncActions) syncActions.style.display = 'none';
+      if (userInfo)    userInfo.style.display     = 'none';
+      if (headerAvatar) headerAvatar.style.display = 'none';
+      setSyncStatus('hidden');
+    }
+  }
+
+  /* =================================================================
+     SECTION H: ONLINE / OFFLINE EVENTS
+     ================================================================= */
+
+  window.addEventListener('online', function () {
+    if (!currentUser) return;
+    if (pendingSync) {
+      pendingSync = false;
+      doSyncToFirebase().catch(function (err) {
+        console.warn('[CoinLence Firebase] Online sync error:', err);
+      });
+    } else {
+      setSyncStatus('synced');
+    }
+  });
+
+  window.addEventListener('offline', function () {
+    if (currentUser) setSyncStatus('offline');
+  });
+
+  /* Header avatar click → jump to Settings → Cloud Sync */
+  document.addEventListener('click', function (e) {
+    if (e.target && e.target.id === 'clHeaderAvatar') {
+      /* Navigate to settings tab — reuse app's existing nav */
+      var settingsBtn = document.querySelector('.nav-btn[data-nav="settings"]');
+      if (settingsBtn) settingsBtn.click();
+      /* Scroll to cloud card */
+      setTimeout(function () {
+        var card = document.getElementById('clCloudCard');
+        if (card) card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 150);
+    }
+  });
+
+  /* =================================================================
+     SECTION I: FIREBASE INITIALIZATION (runs after DOMContentLoaded)
+     ================================================================= */
+
+  document.addEventListener('DOMContentLoaded', function () {
+    initFirebase().catch(function (err) {
+      console.error('[CoinLence Firebase] Init failed:', err);
+    });
+  });
+
+  async function initFirebase() {
+
+    /* ── Load Firebase App ── */
+    var { initializeApp }          = await import(FB_BASE + 'firebase-app.js');
+    var {
+      getAuth,
+      GoogleAuthProvider,
+      signInWithPopup,
+      onAuthStateChanged,
+      signOut
+    }                               = await import(FB_BASE + 'firebase-auth.js');
+    var {
+      getFirestore,
+      enableIndexedDbPersistence,
+      doc, setDoc, getDoc
+    }                               = await import(FB_BASE + 'firebase-firestore.js');
+
+    /* ── Initialize ── */
+    firebaseApp = initializeApp(FIREBASE_CONFIG);
+    auth        = getAuth(firebaseApp);
+    db          = getFirestore(firebaseApp);
+
+    /* Enable offline persistence for Firestore itself
+       (separate from the app's own IndexedDB) */
+    enableIndexedDbPersistence(db).catch(function (err) {
+      /* multi-tab: only one tab can have persistence — non-fatal */
+      if (err.code !== 'failed-precondition' && err.code !== 'unimplemented') {
+        console.warn('[CoinLence Firebase] Persistence:', err.code);
+      }
+    });
+
+    /* ── Auth State Observer ── */
+    onAuthStateChanged(auth, async function (user) {
+      currentUser = user;
+      updateUserUI(user);
+
+      if (user) {
+        var firstLoginKey = '_cl_first_login_' + user.uid;
+        var isFirstLogin  = !localStorage.getItem(firstLoginKey);
+
+        if (isFirstLogin) {
+          /* ── First login on this device → try to restore from cloud ── */
+          setSyncStatus('syncing');
+          clToast('Checking for cloud backup…', 'info');
+
+          var restored = await doRestoreFromFirebase();
+
+          if (restored) {
+            localStorage.setItem(firstLoginKey, '1');
+            clToast('✅ Cloud data restored! Reloading…', 'success');
+            /* Brief delay so the user sees the toast */
+            setTimeout(function () { window.location.reload(); }, 2000);
+          } else {
+            /* No cloud data — this is the primary device, push up */
+            localStorage.setItem(firstLoginKey, '1');
+            setSyncStatus(navigator.onLine ? 'synced' : 'offline');
+            clToast('Signed in! Uploading local data to cloud…', 'info');
+            if (navigator.onLine) {
+              await doSyncToFirebase().catch(console.warn);
+            }
+          }
+        } else {
+          /* ── Returning device — just sync outbound ── */
+          setSyncStatus(navigator.onLine ? 'synced' : 'offline');
+          if (navigator.onLine) {
+            /* Small delay to let app finish loading first */
+            setTimeout(function () {
+              doSyncToFirebase().catch(function (err) {
+                console.warn('[CoinLence Firebase] Login sync error:', err);
+              });
+            }, 1500);
+          }
+        }
+      }
+    });
+
+    /* ── Google Sign-In Button ── */
+    var loginBtn = document.getElementById('clGoogleLoginBtn');
+    if (loginBtn) {
+      loginBtn.addEventListener('click', async function () {
+        try {
+          loginBtn.disabled = true;
+          loginBtn.textContent = 'Signing in…';
+          var provider = new GoogleAuthProvider();
+          await signInWithPopup(auth, provider);
+          clToast('Signed in with Google!', 'success');
+        } catch (err) {
+          console.error('[CoinLence Firebase] Login error:', err);
+          var msg = err.code === 'auth/popup-closed-by-user'
+            ? 'Sign-in popup closed.'
+            : ('Sign-in failed: ' + (err.message || err.code));
+          clToast(msg, 'error');
+          loginBtn.disabled = false;
+          loginBtn.innerHTML = '&#8203;' /* reset text via innerHTML after icon SVG */;
+          /* Re-inject Google SVG + text */
+          loginBtn.innerHTML =
+            '<svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true">' +
+            '<path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>' +
+            '<path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>' +
+            '<path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>' +
+            '<path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.18 1.48-4.97 2.31-8.16 2.31-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>' +
+            '</svg>Sign in with Google';
+        }
+      });
+    }
+
+    /* ── Sign-Out Button ── */
+    var logoutBtn = document.getElementById('clGoogleLogoutBtn');
+    if (logoutBtn) {
+      logoutBtn.addEventListener('click', async function () {
+        try {
+          /* Final sync before signing out */
+          if (navigator.onLine && currentUser) {
+            setSyncStatus('syncing');
+            await doSyncToFirebase().catch(console.warn);
+          }
+          await signOut(auth);
+          currentUser = null;
+          clToast('Signed out from Google.', 'info');
+        } catch (err) {
+          clToast('Sign-out failed: ' + (err.message || err.code), 'error');
+        }
+      });
+    }
+
+    /* ── Manual Backup Button ── */
+    var backupBtn = document.getElementById('clManualBackupBtn');
+    if (backupBtn) {
+      backupBtn.addEventListener('click', async function () {
+        if (!currentUser) {
+          clToast('Sign in with Google first.', 'error');
+          return;
+        }
+        if (!navigator.onLine) {
+          clToast('No internet connection.', 'error');
+          return;
+        }
+        backupBtn.disabled = true;
+        try {
+          await doSyncToFirebase();
+          clToast('☁️ Backup complete!', 'success');
+        } catch (err) {
+          clToast('Backup failed: ' + (err.message || err.code), 'error');
+        } finally {
+          backupBtn.disabled = false;
+        }
+      });
+    }
+
+    /* ── Manual Restore Button ── */
+    var restoreBtn = document.getElementById('clManualRestoreBtn');
+    if (restoreBtn) {
+      restoreBtn.addEventListener('click', async function () {
+        if (!currentUser) {
+          clToast('Sign in with Google first.', 'error');
+          return;
+        }
+        if (!navigator.onLine) {
+          clToast('No internet connection.', 'error');
+          return;
+        }
+        if (!confirm(
+          'Restore from cloud?\n\n' +
+          'This will OVERWRITE your local transactions, categories, and display settings ' +
+          'with your cloud backup.\n\n' +
+          'Your PIN and security settings are NEVER changed.\n\n' +
+          'The app will reload after restore. Continue?'
+        )) return;
+
+        restoreBtn.disabled = true;
+        try {
+          var restored = await doRestoreFromFirebase();
+          if (restored) {
+            clToast('✅ Data restored! Reloading…', 'success');
+            setTimeout(function () { window.location.reload(); }, 2000);
+          } else {
+            clToast('No cloud backup found for your account.', 'info');
+            restoreBtn.disabled = false;
+          }
+        } catch (err) {
+          clToast('Restore failed: ' + (err.message || err.code), 'error');
+          restoreBtn.disabled = false;
+        }
+      });
+    }
+
+  } /* end initFirebase */
+
+})(); /* end IIFE */
+
+/*
+=======================================================================
+  FIRESTORE SECURITY RULES
+  ──────────────────────────────────────────────────────────────────────
+  Copy and paste these rules into:
+  Firebase Console → Firestore Database → Rules tab → Publish
+
+  These rules ensure each user can ONLY read and write their OWN data.
+=======================================================================
+
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Each user can only access their own document tree
+    match /users/{userId}/{document=**} {
+      allow read, write: if
+        request.auth != null &&        // Must be authenticated
+        request.auth.uid == userId;    // Must be the document's owner
+    }
+
+    // Deny all other paths
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
+
+=======================================================================
+*/
+</script>
+
+<!-- ORIGINAL script.js — COMPLETELY UNTOUCHED, not modified at all -->
+<script src="script.js"></script>
+</body>
+</html>
