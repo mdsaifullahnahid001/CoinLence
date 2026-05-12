@@ -201,7 +201,7 @@ This project is licensed under the **MIT License** — see the [LICENSE](LICENSE
 
 <div align="center">
 
-Made with ❤️ by **Md Saifullah Nahid**
+Made with ❤️ by **Md S Nahid**
 
 ⭐ Star this repo if CoinLence helps you manage your finances!
 
