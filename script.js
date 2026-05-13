@@ -27,15 +27,16 @@
       (Project Settings → Your apps → Firebase SDK snippet).
    6. Add Firestore Security Rules (see bottom of this file).
    ============================================================= */
-   const firebaseConfig = {
-    apiKey: "AIzaSyB19WD6r5gzcRw48veFYhJ5yrmlYmYC1KY",
-    authDomain: "coinlence-finance-tracker.firebaseapp.com",
-    projectId: "coinlence-finance-tracker",
-    storageBucket: "coinlence-finance-tracker.firebasestorage.app",
-    messagingSenderId: "371375807824",
-    appId: "1:371375807824:web:e3f336cc99ab77b988a055",
-    measurementId: "G-4XTHP60RWB"
-  };
+   // For Firebase JS SDK v7.20.0 and later, measurementId is optional
+const firebaseConfig = {
+  apiKey: "AIzaSyDBLeK-F1TJJEDx_Hysjor4t4W_FkhpwQ4",
+  authDomain: "coinlence.firebaseapp.com",
+  projectId: "coinlence",
+  storageBucket: "coinlence.firebasestorage.app",
+  messagingSenderId: "823207118121",
+  appId: "1:823207118121:web:d6eb4afd305ccf529ee338",
+  measurementId: "G-CMQRPSBTXH"
+};
 
 /* =============================================================
    [NEW] ── FIREBASE SDK LOADER
