@@ -676,13 +676,14 @@
      STEP 1 ► PASTE YOUR FIREBASE CONFIG HERE
      ────────────────────────────────────────────────────────────── */
   var FIREBASE_CONFIG = {
-    apiKey:            "PASTE_YOUR_API_KEY_HERE",
-    authDomain:        "YOUR_PROJECT_ID.firebaseapp.com",
-    projectId:         "YOUR_PROJECT_ID",
-    storageBucket:     "YOUR_PROJECT_ID.appspot.com",
-    messagingSenderId: "YOUR_SENDER_ID",
-    appId:             "YOUR_APP_ID"
-  };
+     apiKey: "AIzaSyCTvEEsHo2ymrbpayFPRpUbj5bQ_ac46WY",
+  authDomain: "coinlence-5bc32.firebaseapp.com",
+  projectId: "coinlence-5bc32",
+  storageBucket: "coinlence-5bc32.firebasestorage.app",
+  messagingSenderId: "375309668180",
+  appId: "1:375309668180:web:10dce875d6ddc24835c2c1",
+  measurementId: "G-DDVZ4ENZHJ"
+};
 
   /* ──────────────────────────────────────────────────────────────
      CONSTANTS — must match script.js exactly
@@ -1384,7 +1385,7 @@ service cloud.firestore {
 </script>
 
 <!-- ORIGINAL script.js — completely untouched -->
-<script src="script.js"></script>
+<script type="module" src="script.js"></script>
 <script>
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('./pwabuilder-sw.js');
