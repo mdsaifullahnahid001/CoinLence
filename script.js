@@ -1,49 +1,31 @@
 /* =============================================================
-   CoinLence v2.0 — script.js
+   CoinLence v2.1 — script.js
    Premium offline-first PWA personal finance tracker
    ============================================================= */
 
-/* =============================================================
-   ARCHITECTURE
-   ─────────────────────────────────────────────────────────────
-   Local Storage / IndexedDB  ← PRIMARY (unchanged, always on)
-         ↓  (non-blocking, after every local write)
-   Background Sync Engine     ← debounced, queue-safe
-         ↓
-   Firebase Firestore          ← backup / restore / multi-device
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 
-   RULES:
-   • IndexedDB / localStorage is ALWAYS the source of truth.
-   • Firebase is a cloud backup layer ONLY.
-   • If Firebase fails for any reason, the app keeps working.
-   • Sensitive data (PIN, recovery key) is NEVER uploaded.
-   ============================================================= */
+import {
+    getAuth,
+    GoogleAuthProvider,
+    signInWithPopup,
+    signOut,
+    onAuthStateChanged,
+    browserLocalPersistence,
+    setPersistence
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 
-
-/* =============================================================
-   ██████╗  █████╗ ██████╗ ████████╗    ██╗
-   ██╔══██╗██╔══██╗██╔══██╗╚══██╔══╝   ███║
-   ██████╔╝███████║██████╔╝   ██║       ╚██║
-   ██╔═══╝ ██╔══██║██╔══██╗   ██║        ██║
-   ██║     ██║  ██║██║  ██║   ██║        ██║
-   ╚═╝     ╚═╝  ╚═╝╚═╝  ╚═╝   ╚═╝        ╚═╝
-   FIREBASE v10 — COMPLETE REBUILD
-   ============================================================= */
+import {
+    getFirestore,
+    doc,
+    setDoc,
+    getDoc,
+    serverTimestamp,
+    enableIndexedDbPersistence
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 /* =============================================================
    FIREBASE CONFIGURATION
-   ─────────────────────────────────────────────────────────────
-   Replace the values below with YOUR Firebase project config.
-   Firebase Console → Project Settings → Your apps → SDK snippet
-   ─────────────────────────────────────────────────────────────
-   SETUP CHECKLIST:
-   ✅ 1. Replace config values below
-   ✅ 2. Firebase Console → Authentication → Sign-in method:
-          Enable: Google  AND  Email/Password
-   ✅ 3. Firebase Console → Authentication → Settings →
-          Authorized domains: add your domain
-   ✅ 4. Firebase Console → Firestore Database → Rules:
-          (paste Firestore rules from the bottom of this file)
    ============================================================= */
   // Import the functions you need from the SDKs you need
   import { initializeApp } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-app.js";
@@ -67,20 +49,253 @@
   const app = initializeApp(firebaseConfig);
   const analytics = getAnalytics(app);
 /* =============================================================
-   FIREBASE STATE
-   All Firebase-related variables are prefixed _fb to avoid
-   any conflict with the existing app globals.
+   INITIALIZE FIREBASE
    ============================================================= */
-let _fbApp        = null;   // Firebase App instance
-let _fbAuth       = null;   // Auth module bundle
-let _fbDb         = null;   // Firestore module bundle
-let _fbUser       = null;   // Currently signed-in user (or null)
-let _fbOnline     = navigator.onLine;
-let _fbSyncing    = false;  // True while a Firestore write is in flight
-let _fbSyncTimer  = null;   // Debounce timer for auto-sync
-let _fbSyncQueue  = false;  // True if a sync was missed while offline
-let _fbAuthReady  = false;  // True once onAuthStateChanged has fired once
 
+const app = initializeApp(firebaseConfig);
+
+const auth = getAuth(app);
+
+const db = getFirestore(app);
+
+const provider = new GoogleAuthProvider();
+
+/* =============================================================
+   GOOGLE PROVIDER SETTINGS
+   ============================================================= */
+
+provider.setCustomParameters({
+    prompt: "select_account"
+});
+
+/* =============================================================
+   ENABLE FIRESTORE OFFLINE PERSISTENCE
+   ============================================================= */
+
+enableIndexedDbPersistence(db)
+    .then(() => {
+
+        console.log("Offline persistence enabled");
+
+    })
+    .catch((error) => {
+
+        console.error("Offline persistence error:", error.code);
+
+    });
+
+/* =============================================================
+   AUTH PERSISTENCE
+   Keeps user logged in after refresh/reopen
+   ============================================================= */
+
+async function initializeAuth() {
+
+    try {
+
+        await setPersistence(auth, browserLocalPersistence);
+
+        console.log("Auth persistence enabled");
+
+    } catch (error) {
+
+        console.error("Persistence Error:", error.message);
+
+    }
+
+}
+
+initializeAuth();
+
+/* =============================================================
+   AUTH STATE LISTENER
+   Detect logged in/out user automatically
+   ============================================================= */
+
+onAuthStateChanged(auth, async (user) => {
+
+    if (user) {
+
+        console.log("User Logged In");
+
+        console.log("Name:", user.displayName);
+
+        console.log("Email:", user.email);
+
+        console.log("UID:", user.uid);
+
+        // Load cloud data automatically
+
+        const cloudData = await loadUserCloudData();
+
+        // Example:
+        // if (cloudData?.finance?.balance !== undefined) {
+        //     restoreBalance(cloudData.finance.balance);
+        // }
+
+    } else {
+
+        console.log("No user logged in");
+
+    }
+
+});
+
+/* =============================================================
+   GOOGLE LOGIN
+   ============================================================= */
+
+export async function loginWithGoogle() {
+
+    try {
+
+        const result = await signInWithPopup(auth, provider);
+
+        const user = result.user;
+
+        console.log("Login Successful");
+
+        // Create/update user profile in Firestore
+
+        await setDoc(doc(db, "users", user.uid), {
+
+            profile: {
+                name: user.displayName || "",
+                email: user.email || "",
+                photo: user.photoURL || ""
+            },
+
+            lastLogin: serverTimestamp()
+
+        }, { merge: true });
+
+    } catch (error) {
+
+        console.error("Login Error:", error.message);
+
+    }
+
+}
+
+/* =============================================================
+   LOGOUT USER
+   ============================================================= */
+
+export async function logoutUser() {
+
+    try {
+
+        await signOut(auth);
+
+        console.log("User logged out");
+
+    } catch (error) {
+
+        console.error("Logout Error:", error.message);
+
+    }
+
+}
+
+/* =============================================================
+   SYNC BALANCE TO FIRESTORE
+   ============================================================= */
+
+export async function syncBalanceToCloud(amount) {
+
+    const user = auth.currentUser;
+
+    if (!user) {
+
+        console.log("No logged in user");
+
+        return;
+
+    }
+
+    try {
+
+        await setDoc(doc(db, "users", user.uid), {
+
+            finance: {
+                balance: amount
+            },
+
+            lastSync: serverTimestamp()
+
+        }, { merge: true });
+
+        console.log("Balance synced successfully");
+
+    } catch (error) {
+
+        console.error("Sync Error:", error.message);
+
+    }
+
+}
+
+/* =============================================================
+   LOAD USER DATA FROM FIRESTORE
+   ============================================================= */
+
+export async function loadUserCloudData() {
+
+    const user = auth.currentUser;
+
+    if (!user) return null;
+
+    try {
+
+        const userRef = doc(db, "users", user.uid);
+
+        const userSnap = await getDoc(userRef);
+
+        if (userSnap.exists()) {
+
+            const data = userSnap.data();
+
+            console.log("Cloud data loaded");
+
+            console.log(data);
+
+            return data;
+
+        } else {
+
+            console.log("No cloud data found");
+
+            return null;
+
+        }
+
+    } catch (error) {
+
+        console.error("Load Error:", error.message);
+
+        return null;
+
+    }
+
+}
+
+/* =============================================================
+   OPTIONAL HELPER FUNCTIONS
+   ============================================================= */
+
+export function getCurrentUser() {
+
+    return auth.currentUser;
+
+}
+
+export function isUserLoggedIn() {
+
+    return !!auth.currentUser;
+
+}
+
+/* 
 /* =============================================================
    FIREBASE LOADER
    Dynamically imports Firebase v10 ES modules from the CDN.
