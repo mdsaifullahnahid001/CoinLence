@@ -21,8 +21,8 @@
 <title>CoinLence</title>
 
 <!-- ================================================================
-     NEW: Firebase Integration Styles
-     These ONLY affect new Firebase UI elements.
+     Firebase Integration Styles
+     These ONLY affect Firebase UI elements.
      Your existing style.css is completely untouched.
      ================================================================ -->
 <style>
@@ -57,6 +57,43 @@
     flex-shrink: 0;
   }
 
+  /* ---- Auth Form (logged-out state) ---- */
+  #clAuthForm { display: none; /* shown via JS when logged out */ }
+
+  /* ---- Auth Inputs ---- */
+  .cl-input {
+    width: 100%;
+    box-sizing: border-box;
+    background: var(--bg-elev-2, #1a2435);
+    border: 1px solid rgba(255,255,255,0.10);
+    color: var(--text-primary, #e8edf3);
+    font-size: 14px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    outline: none;
+    transition: border-color 0.2s;
+    margin-bottom: 8px;
+    display: block;
+  }
+  .cl-input::placeholder { color: var(--text-muted, #8896a5); }
+  .cl-input:focus { border-color: rgba(255,255,255,0.30); }
+
+  /* ---- OR Divider ---- */
+  .cl-or-divider {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 10px 0;
+    color: var(--text-muted, #8896a5);
+    font-size: 12px;
+  }
+  .cl-or-divider::before,
+  .cl-or-divider::after {
+    content: '';
+    flex: 1;
+    border-top: 1px solid rgba(255,255,255,0.08);
+  }
+
   /* ---- Google Sign-In Button ---- */
   .cl-google-btn {
     display: inline-flex;
@@ -72,7 +109,7 @@
     border-radius: 8px;
     cursor: pointer;
     width: 100%;
-    margin-bottom: 8px;
+    margin-bottom: 4px;
     transition: box-shadow 0.2s;
   }
   .cl-google-btn:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.18); }
@@ -95,6 +132,7 @@
     object-fit: cover;
     flex-shrink: 0;
     border: 2px solid rgba(255,255,255,0.15);
+    background: var(--bg-elev-2, #1a2435);
   }
   .cl-user-text { flex: 1; min-width: 0; }
   .cl-user-text strong {
@@ -235,20 +273,18 @@
 <!-- ============== MAIN APP ============== -->
 <main id="app" class="hidden">
 
-  <!-- HEADER -->
-  <!-- NEW: Added clSyncStatus and clHeaderAvatar to header-actions.
-       Everything else here is ORIGINAL and UNTOUCHED. -->
+  <!-- HEADER — sync status badge + avatar added; all else original -->
   <header class="app-header">
     <div class="brand">
       <span class="brand-mark">৳</span>
       <span class="brand-name">CoinLence</span>
     </div>
     <div class="header-actions">
-      <!-- NEW: Sync status badge — hidden until user logs in -->
+      <!-- Sync status badge — hidden until user logs in -->
       <span class="cl-sync-status" id="clSyncStatus" title="Cloud sync status"></span>
-      <!-- NEW: User avatar in header — hidden until user logs in -->
+      <!-- User avatar in header — hidden until user logs in -->
       <img class="cl-header-avatar" id="clHeaderAvatar" alt="Account" title="View cloud sync settings" />
-      <!-- ORIGINAL buttons below — completely untouched -->
+      <!-- ORIGINAL buttons — completely untouched -->
       <button class="icon-btn" id="themeToggle" aria-label="Toggle theme">🌙</button>
       <button class="icon-btn" id="lockNowBtn" aria-label="Lock app">🔒</button>
     </div>
@@ -340,7 +376,7 @@
     </div>
   </section>
 
-  <!-- SETTINGS — ORIGINAL cards UNTOUCHED. NEW Cloud Sync card inserted before About. -->
+  <!-- SETTINGS — original cards untouched. Cloud Sync card rebuilt below. -->
   <section class="view" id="view-settings">
     <h2 class="view-title">Settings</h2>
 
@@ -383,26 +419,61 @@
     </div>
 
     <!-- ================================================================
-         NEW: Cloud Sync Card
-         Inserted here — between Backup and About.
-         All existing cards above are ORIGINAL and UNTOUCHED.
+         NEW: Cloud Sync Card (rebuilt)
+         Placed between Backup and About — same position as before.
          ================================================================ -->
     <div class="card settings-card" id="clCloudCard">
       <h4>☁️ Cloud Sync</h4>
 
-      <!-- Google Sign-In Button (shown when logged out) -->
-      <button class="cl-google-btn" id="clGoogleLoginBtn" style="display:none">
-        <!-- Google G logo SVG -->
-        <svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true">
-          <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
-          <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
-          <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
-          <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.18 1.48-4.97 2.31-8.16 2.31-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
-        </svg>
-        Sign in with Google
-      </button>
+      <!-- ── LOGGED-OUT STATE ──────────────────────────────────────── -->
+      <!-- Shown when no user is signed in. Hidden when signed in.     -->
+      <div id="clAuthForm">
 
-      <!-- Logged-In User Info (shown when logged in) -->
+        <!-- Email input -->
+        <input
+          type="email"
+          id="clEmailInput"
+          class="cl-input"
+          placeholder="Email address"
+          autocomplete="email"
+          inputmode="email"
+        />
+
+        <!-- Password input -->
+        <input
+          type="password"
+          id="clPasswordInput"
+          class="cl-input"
+          placeholder="Password (min. 6 characters)"
+          autocomplete="current-password"
+        />
+
+        <!-- Login / Register button -->
+        <button class="btn btn-primary btn-block" id="clEmailAuthBtn" style="margin-bottom:10px;">
+          Login / Register
+        </button>
+
+        <!-- OR divider -->
+        <div class="cl-or-divider"><span>or</span></div>
+
+        <!-- Google Sign-In button -->
+        <button class="cl-google-btn" id="clGoogleLoginBtn">
+          <svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true">
+            <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
+            <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
+            <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
+            <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.18 1.48-4.97 2.31-8.16 2.31-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
+          </svg>
+          Continue with Google
+        </button>
+
+      </div>
+      <!-- END clAuthForm -->
+
+      <!-- ── LOGGED-IN STATE ───────────────────────────────────────── -->
+      <!-- Shown when user is signed in. Hidden when signed out.       -->
+
+      <!-- User info row -->
       <div class="cl-user-info" id="clUserInfo">
         <img class="cl-user-avatar" id="clUserAvatar" alt="User avatar" />
         <div class="cl-user-text">
@@ -411,11 +482,11 @@
         </div>
       </div>
 
-      <!-- Sync Action Buttons -->
-      <div class="cl-sync-actions" id="clSyncActions" style="display:none">
-        <button class="btn" id="clManualBackupBtn" title="Push local data to Firebase now">☁️ Backup</button>
-        <button class="btn" id="clManualRestoreBtn" title="Pull data from Firebase to this device">⬇️ Restore</button>
-        <button class="btn btn-ghost" id="clGoogleLogoutBtn" title="Sign out of Google">Sign Out</button>
+      <!-- Sync action buttons -->
+      <div class="cl-sync-actions" id="clSyncActions" style="display:none;">
+        <button class="btn" id="clManualBackupBtn" title="Push local data to cloud now">☁️ Backup</button>
+        <button class="btn" id="clManualRestoreBtn" title="Pull data from cloud to this device">⬇️ Restore</button>
+        <button class="btn btn-ghost" id="clGoogleLogoutBtn" title="Sign out">Sign Out</button>
       </div>
 
       <hr class="cl-divider" />
@@ -425,11 +496,11 @@
 
       <!-- Guidance note -->
       <p class="cl-notice muted">
-        ☁️ Your financial data is always saved locally first. Google sync is a secure backup layer.
+        ☁️ Your data is always saved locally first. Cloud sync is a secure backup layer.
         PIN and security settings are never uploaded to the cloud.
       </p>
     </div>
-    <!-- END NEW Cloud Sync Card -->
+    <!-- END Cloud Sync Card -->
 
     <!-- ORIGINAL: About card — UNTOUCHED -->
     <div class="card settings-card">
@@ -569,39 +640,33 @@
 <div id="toastContainer" class="toast-container"></div>
 
 <!-- ================================================================
-     NEW: Firebase Integration Script
+     CoinLence Firebase Cloud Sync Layer  v2.0
      ──────────────────────────────────────────────────────────────
-     Placed BEFORE script.js so it can intercept IndexedDB.open()
-     before the main app opens the database.
-
-     This script uses dynamic import() to load Firebase ESM modules
-     from the official CDN. No build step required.
+     Placement: BEFORE script.js  (intercepts IndexedDB.open early)
 
      Architecture:
-       IndexedDB (primary, app-managed)
-           ↓  intercepted write events
-       Firebase Sync Engine (this script)
-           ↓  debounced 2s after any write
-       Cloud Firestore (backup + restore layer)
+       IndexedDB/localStorage  ← PRIMARY source of truth (untouched)
+           ↓  write-event hooks
+       Firebase Sync Engine    ← this block only
+           ↓  debounced 3 s after any write
+       Cloud Firestore         ← secure backup / restore layer
 
-     Nothing in script.js is modified.
+     Auth methods supported:
+       • Google (popup, shows all saved accounts)
+       • Email + Password (auto-register if new email)
+
+     Security: PIN, recovery key, password hashes are NEVER synced.
      ================================================================ -->
 <script>
 /* =================================================================
-   CoinLence — Firebase Cloud Sync Layer  v1.0
-   Author: Integrated by Claude (Anthropic) for CoinLence by Saifullah
-   =================================================================
-
-   ⚙️  HOW TO CONFIGURE:
-   1. Go to https://console.firebase.google.com
-   2. Create a project (or open existing one)
-   3. Project Settings → General → Your Apps → Add Web App
-   4. Copy the firebaseConfig object and paste below
-   5. Enable "Authentication" → Sign-in Method → Google
-   6. Enable "Firestore Database" (start in production mode)
-   7. Deploy the Firestore Security Rules shown at the bottom
-      of this script as a comment.
-
+   HOW TO CONFIGURE:
+   1. https://console.firebase.google.com → create / open project
+   2. Project Settings → General → Your Apps → Add Web App
+   3. Copy firebaseConfig and paste in STEP 1 below
+   4. Authentication → Sign-in Method → enable Google + Email/Password
+   5. Firestore Database → create database (production mode)
+   6. Paste the Security Rules at the bottom of this comment block
+      into Firestore → Rules tab → Publish
    ================================================================= */
 
 (function () {
@@ -620,47 +685,40 @@
   };
 
   /* ──────────────────────────────────────────────────────────────
-     CONSTANTS — must exactly match script.js constants
+     CONSTANTS — must match script.js exactly
      ────────────────────────────────────────────────────────────── */
-  var DB_NAME    = 'coinlence_db';   // same as script.js
-  var DB_VERSION = 1;                // same as script.js
+  var DB_NAME    = 'coinlence_db';
+  var DB_VERSION = 1;
   var STORES     = { TX: 'transactions', CATS: 'categories', META: 'meta' };
 
-  /* ──────────────────────────────────────────────────────────────
-     Firebase CDN — modular SDK v10 (ESM, dynamic import)
-     ────────────────────────────────────────────────────────────── */
-  var FB_VER = '10.12.0';
+  /* Firebase v10 modular CDN */
+  var FB_VER  = '10.12.0';
   var FB_BASE = 'https://www.gstatic.com/firebasejs/' + FB_VER + '/';
 
   /* ──────────────────────────────────────────────────────────────
      INTERNAL STATE
      ────────────────────────────────────────────────────────────── */
-  var firebaseApp  = null;
-  var auth         = null;
-  var db           = null;   // Firestore instance
-  var currentUser  = null;
+  var firebaseApp = null;
+  var auth        = null;
+  var db          = null;        /* Firestore instance            */
+  var currentUser = null;
 
-  var appIdb       = null;   // IDBDatabase reference (intercepted)
-  var syncTimer    = null;   // debounce timer
-  var isSyncing    = false;
-  var pendingSync  = false;  // queued while offline or mid-sync
+  var appIdb      = null;        /* IDBDatabase reference         */
+  var syncTimer   = null;        /* debounce handle               */
+  var isSyncing   = false;
+  var pendingSync = false;       /* queued while offline/mid-sync */
 
-  /* ──────────────────────────────────────────────────────────────
-     META KEYS NEVER SYNCED TO CLOUD
-     (PIN hashes, lock state — security stays local-only)
-     ────────────────────────────────────────────────────────────── */
+  /* Meta keys that must NEVER leave the device */
   var LOCAL_ONLY_META = [
     'pinHash', 'pinLength', 'recoveryHash',
     'failedAttempts', 'lockUntil', 'lastBackupPrompt'
   ];
 
   /* =================================================================
-     SECTION A: IndexedDB INTERCEPTION
-     We wrap indexedDB.open() BEFORE script.js runs.
-     This gives us a reference to the app's IDBDatabase instance
-     and lets us hook into every readwrite transaction.
+     SECTION A — IndexedDB INTERCEPTION
+     Wraps indexedDB.open() before script.js runs so every readwrite
+     transaction completion fires a debounced cloud sync.
      ================================================================= */
-
   (function interceptIndexedDB() {
     var _origOpen = indexedDB.open.bind(indexedDB);
 
@@ -668,13 +726,11 @@
       var req = _origOpen(name, version);
 
       if (name === DB_NAME) {
-        /* Capture the DB instance and wrap db.transaction */
         req.addEventListener('success', function (e) {
           var idb = e.target.result;
-          appIdb = idb;
+          appIdb   = idb;
 
-          /* Wrap db.transaction so every readwrite completion
-             triggers a debounced Firebase sync */
+          /* Hook every readwrite transaction */
           var _origTx = idb.transaction.bind(idb);
           idb.transaction = function (storeNames, mode) {
             var tx = _origTx(storeNames, mode);
@@ -692,218 +748,173 @@
     };
   })();
 
-  /* ──────────────────────────────────────────────────────────────
-     Also intercept localStorage.setItem for the fallback path.
-     script.js uses localStorage when IndexedDB is unavailable.
-     ────────────────────────────────────────────────────────────── */
+  /* Also intercept localStorage.setItem (fallback path in script.js) */
   (function interceptLocalStorage() {
     var _origSet = localStorage.setItem.bind(localStorage);
     localStorage.setItem = function (key, value) {
       _origSet(key, value);
-      /* Trigger sync only for coinlence app data, not our own keys */
-      if (
-        key.startsWith('coinlence_') &&
-        !key.startsWith('_cl_')
-      ) {
+      if (key.indexOf('cl_') === 0 || key.indexOf('coinlence') === 0) {
         scheduleSyncToFirebase();
       }
     };
   })();
 
   /* =================================================================
-     SECTION B: SYNC STATUS UI
+     SECTION B — SYNC SCHEDULER  (debounced, 3 s)
      ================================================================= */
-
-  function setSyncStatus(status) {
-    /* status: 'synced' | 'syncing' | 'offline' | 'error' | 'hidden' */
-    var el = document.getElementById('clSyncStatus');
-    if (!el) return;
-    if (status === 'hidden') {
-      el.style.display = 'none';
-      return;
-    }
-    var map = {
-      synced:  { icon: '☁️', text: 'Synced' },
-      syncing: { icon: '🔄', text: 'Syncing…' },
-      offline: { icon: '📴', text: 'Offline' },
-      error:   { icon: '⚠️', text: 'Sync Error' }
-    };
-    var info = map[status] || map.synced;
-    el.dataset.status = status;
-    el.textContent = info.icon + ' ' + info.text;
-    el.style.display = 'flex';
-  }
-
-  function updateLastSyncUI(timestamp) {
-    var el = document.getElementById('clLastSyncTime');
-    if (!el || !timestamp) return;
-    var d = new Date(timestamp);
-    el.textContent = 'Last synced: ' + d.toLocaleString();
-  }
-
-  /* =================================================================
-     SECTION C: IDB HELPERS (reads/writes bypassing app's IIFE scope)
-     We must use the same _b64 encoding that script.js uses.
-     ================================================================= */
-
-  /** Encode exactly as script.js b64Encode() does */
-  function _b64Enc(str) {
-    try { return btoa(unescape(encodeURIComponent(str))); }
-    catch (e) { return btoa(str); }
-  }
-
-  /** Decode exactly as script.js b64Decode() does */
-  function _b64Dec(str) {
-    try { return decodeURIComponent(escape(atob(str))); }
-    catch (e) {
-      try { return atob(str); } catch (_) { return null; }
-    }
-  }
-
-  /** Return the keyPath for a given store name */
-  function _keyPath(store) {
-    return store === STORES.META ? 'key' : 'id';
-  }
-
-  /**
-   * Read all decoded records from a store.
-   * Falls back to localStorage if IndexedDB isn't available yet.
-   */
-  function idbGetAll(store) {
-    /* IDB path */
-    if (appIdb) {
-      return new Promise(function (resolve, reject) {
-        try {
-          var tx  = appIdb.transaction(store, 'readonly');
-          var os  = tx.objectStore(store);
-          var req = os.getAll();
-          req.onsuccess = function () {
-            var items = (req.result || []).map(function (rec) {
-              if (rec && rec._b64) {
-                var dec = _b64Dec(rec._b64);
-                try { return dec ? JSON.parse(dec) : null; } catch (e) { return null; }
-              }
-              return rec;
-            }).filter(Boolean);
-            resolve(items);
-          };
-          req.onerror = function () { reject(req.error); };
-        } catch (err) { reject(err); }
-      });
-    }
-
-    /* localStorage fallback path */
-    try {
-      var raw = localStorage.getItem('coinlence_' + store);
-      if (!raw) return Promise.resolve([]);
-      var dec = _b64Dec(raw);
-      if (!dec) return Promise.resolve([]);
-      var arr = JSON.parse(dec);
-      return Promise.resolve(Array.isArray(arr) ? arr : []);
-    } catch (e) {
-      return Promise.resolve([]);
-    }
-  }
-
-  /**
-   * Write a decoded object back using the same _b64 wrapping.
-   * Only used during RESTORE — normal writes happen through script.js.
-   */
-  function idbPutDecoded(store, obj) {
-    var kp = _keyPath(store);
-
-    /* IDB path */
-    if (appIdb) {
-      return new Promise(function (resolve, reject) {
-        try {
-          var wrapped = {};
-          wrapped[kp] = obj[kp];
-          wrapped._b64 = _b64Enc(JSON.stringify(obj));
-          var tx  = appIdb.transaction(store, 'readwrite');
-          var os  = tx.objectStore(store);
-          var req = os.put(wrapped);
-          req.onsuccess = function () { resolve(true); };
-          req.onerror   = function () { reject(req.error); };
-        } catch (err) { reject(err); }
-      });
-    }
-
-    /* localStorage fallback path */
-    return idbGetAll(store).then(function (all) {
-      var idx = all.findIndex(function (x) { return x[kp] === obj[kp]; });
-      if (idx >= 0) all[idx] = obj; else all.push(obj);
-      localStorage.setItem('coinlence_' + store, _b64Enc(JSON.stringify(all)));
-      return true;
-    });
-  }
-
-  /**
-   * Clear all records in a store.
-   * Only used during RESTORE.
-   */
-  function idbClear(store) {
-    if (appIdb) {
-      return new Promise(function (resolve, reject) {
-        try {
-          var tx  = appIdb.transaction(store, 'readwrite');
-          var os  = tx.objectStore(store);
-          var req = os.clear();
-          req.onsuccess = function () { resolve(); };
-          req.onerror   = function () { reject(req.error); };
-        } catch (err) { reject(err); }
-      });
-    }
-    localStorage.removeItem('coinlence_' + store);
-    return Promise.resolve();
-  }
-
-  /**
-   * Wait until the app has opened IndexedDB (max 8 s).
-   */
-  function waitForIdb() {
-    return new Promise(function (resolve) {
-      if (appIdb) { resolve(); return; }
-      var t0    = Date.now();
-      var timer = setInterval(function () {
-        if (appIdb || Date.now() - t0 > 8000) {
-          clearInterval(timer);
-          resolve();
-        }
-      }, 80);
-    });
-  }
-
-  /* =================================================================
-     SECTION D: FIREBASE SYNC ENGINE
-     ================================================================= */
-
-  /** Debounce: schedule a sync 2 s after the last write */
   function scheduleSyncToFirebase() {
-    if (!currentUser || !db) return; /* Not logged in — skip */
-    if (syncTimer) clearTimeout(syncTimer);
+    if (!currentUser) return;
+    clearTimeout(syncTimer);
     syncTimer = setTimeout(function () {
+      if (!navigator.onLine) { pendingSync = true; return; }
+      if (isSyncing)          { pendingSync = true; return; }
       doSyncToFirebase().catch(function (err) {
-        console.warn('[CoinLence Firebase] Sync error:', err);
-        setSyncStatus('error');
+        console.warn('[CoinLence Firebase] Auto-sync error:', err);
       });
-    }, 2000);
+    }, 3000);
   }
 
-  /**
-   * Read all local data and push it to Firestore.
-   * Local data is ALWAYS the source of truth.
-   */
+  /* Flush queued sync when network returns */
+  window.addEventListener('online', function () {
+    setSyncStatus('synced');
+    if (pendingSync && currentUser) {
+      pendingSync = false;
+      doSyncToFirebase().catch(console.warn);
+    }
+  });
+  window.addEventListener('offline', function () {
+    setSyncStatus('offline');
+  });
+
+  /* =================================================================
+     SECTION C — READ ALL DATA FROM IndexedDB
+     Returns { transactions, categories, meta } — meta stripped of
+     security-sensitive keys before sending to Firestore.
+     ================================================================= */
+  function readAllFromIdb() {
+    return new Promise(function (resolve, reject) {
+      if (!appIdb) { resolve(null); return; }
+
+      var result = { transactions: [], categories: [], meta: {} };
+      var pending = 3;
+
+      function done() {
+        if (--pending === 0) resolve(result);
+      }
+
+      try {
+        /* Transactions */
+        var txTx   = appIdb.transaction([STORES.TX], 'readonly');
+        var txReq  = txTx.objectStore(STORES.TX).getAll();
+        txReq.onsuccess  = function () { result.transactions = txReq.result || []; done(); };
+        txReq.onerror    = function () { done(); };
+
+        /* Categories */
+        var catTx  = appIdb.transaction([STORES.CATS], 'readonly');
+        var catReq = catTx.objectStore(STORES.CATS).getAll();
+        catReq.onsuccess = function () { result.categories = catReq.result || []; done(); };
+        catReq.onerror   = function () { done(); };
+
+        /* Meta — strip security keys */
+        var metaTx  = appIdb.transaction([STORES.META], 'readonly');
+        var metaReq = metaTx.objectStore(STORES.META).getAll();
+        metaReq.onsuccess = function () {
+          var rows = metaReq.result || [];
+          rows.forEach(function (row) {
+            if (LOCAL_ONLY_META.indexOf(row.key) === -1) {
+              result.meta[row.key] = row.value;
+            }
+          });
+          done();
+        };
+        metaReq.onerror = function () { done(); };
+
+      } catch (err) {
+        reject(err);
+      }
+    });
+  }
+
+  /* =================================================================
+     SECTION D — WRITE RESTORED DATA INTO IndexedDB
+     Completely replaces transactions, categories, and non-sensitive
+     meta. Security meta (PIN etc.) is never touched.
+     ================================================================= */
+  function writeAllToIdb(data) {
+    return new Promise(function (resolve, reject) {
+      if (!appIdb || !data) { resolve(false); return; }
+
+      var pending = 3;
+      var errors  = 0;
+
+      function done(err) {
+        if (err) errors++;
+        if (--pending === 0) {
+          errors === 0 ? resolve(true) : reject(new Error('IDB write had errors'));
+        }
+      }
+
+      try {
+        /* Transactions — clear + refill */
+        var txTx   = appIdb.transaction([STORES.TX], 'readwrite');
+        var txOS   = txTx.objectStore(STORES.TX);
+        txOS.clear().onsuccess = function () {
+          var items = data.transactions || [];
+          var i = 0;
+          function putNext() {
+            if (i >= items.length) { return; }
+            txOS.put(items[i++]).onsuccess = putNext;
+          }
+          putNext();
+        };
+        txTx.oncomplete = function () { done(); };
+        txTx.onerror    = function (e) { done(e); };
+
+        /* Categories — clear + refill */
+        var catTx  = appIdb.transaction([STORES.CATS], 'readwrite');
+        var catOS  = catTx.objectStore(STORES.CATS);
+        catOS.clear().onsuccess = function () {
+          var items = data.categories || [];
+          var i = 0;
+          function putNext() {
+            if (i >= items.length) { return; }
+            catOS.put(items[i++]).onsuccess = putNext;
+          }
+          putNext();
+        };
+        catTx.oncomplete = function () { done(); };
+        catTx.onerror    = function (e) { done(e); };
+
+        /* Meta — only non-sensitive keys */
+        var metaTx = appIdb.transaction([STORES.META], 'readwrite');
+        var metaOS = metaTx.objectStore(STORES.META);
+        var metaEntries = Object.entries(data.meta || {});
+        var mi = 0;
+        function putMetaNext() {
+          if (mi >= metaEntries.length) { return; }
+          var pair = metaEntries[mi++];
+          if (LOCAL_ONLY_META.indexOf(pair[0]) === -1) {
+            metaOS.put({ key: pair[0], value: pair[1] }).onsuccess = putMetaNext;
+          } else {
+            putMetaNext();
+          }
+        }
+        putMetaNext();
+        metaTx.oncomplete = function () { done(); };
+        metaTx.onerror    = function (e) { done(e); };
+
+      } catch (err) {
+        reject(err);
+      }
+    });
+  }
+
+  /* =================================================================
+     SECTION E — FIRESTORE SYNC  (upload local → cloud)
+     ================================================================= */
   async function doSyncToFirebase() {
     if (!currentUser || !db) return;
-
-    /* Queue if already syncing */
     if (isSyncing) { pendingSync = true; return; }
-
-    if (!navigator.onLine) {
-      setSyncStatus('offline');
-      pendingSync = true;
-      return;
-    }
 
     isSyncing = true;
     setSyncStatus('syncing');
@@ -911,266 +922,216 @@
     try {
       var { doc, setDoc } = await import(FB_BASE + 'firebase-firestore.js');
 
-      /* Read all three stores in parallel */
-      var results = await Promise.all([
-        idbGetAll(STORES.TX),
-        idbGetAll(STORES.CATS),
-        idbGetAll(STORES.META)
-      ]);
-      var transactions = results[0];
-      var categories   = results[1];
-      var meta         = results[2];
-
-      /* Strip LOCAL_ONLY_META entries from cloud payload */
-      var cloudMeta = meta.filter(function (m) {
-        return LOCAL_ONLY_META.indexOf(m.key) === -1;
-      });
-
-      /* Safety check: prevent uploading empty data if reads failed */
-      if (transactions.length === 0 && meta.length === 0) {
-        /* Possibly the DB isn't ready yet — skip this cycle */
-        isSyncing = false;
-        return;
-      }
+      var data = await readAllFromIdb();
+      if (!data) throw new Error('Could not read IndexedDB data');
 
       var payload = {
-        transactions: transactions,
-        categories:   categories,
-        meta:         cloudMeta,
-        syncedAt:     Date.now(),
-        deviceId:     getDeviceId(),
-        appVersion:   '2.0'
+        transactions : data.transactions,
+        categories   : data.categories,
+        meta         : data.meta,
+        syncedAt     : Date.now(),
+        deviceUA     : navigator.userAgent.slice(0, 120)
       };
 
-      var docRef = doc(db, 'users', currentUser.uid, 'appData', 'main');
+      var docRef = doc(db, 'users', currentUser.uid, 'data', 'app_state');
       await setDoc(docRef, payload);
 
-      var now = Date.now();
-      setSyncStatus('synced');
-      updateLastSyncUI(now);
-      localStorage.setItem('_cl_last_sync_' + currentUser.uid, String(now));
-      pendingSync = false;
+      /* Update last-sync display */
+      var now = new Date().toLocaleString();
+      var el  = document.getElementById('clLastSyncTime');
+      if (el) el.textContent = 'Last synced: ' + now;
+      localStorage.setItem('_cl_last_sync', now);
 
+      setSyncStatus('synced');
     } catch (err) {
       setSyncStatus('error');
+      console.error('[CoinLence Firebase] Sync error:', err);
       throw err;
     } finally {
       isSyncing = false;
-      /* Run any queued sync that came in while we were busy */
-      if (pendingSync && navigator.onLine) {
+      if (pendingSync) {
         pendingSync = false;
-        setTimeout(doSyncToFirebase, 1000);
+        setTimeout(function () {
+          doSyncToFirebase().catch(console.warn);
+        }, 2000);
       }
     }
   }
 
-  /**
-   * Pull Firestore data and restore it to local IndexedDB.
-   * PIN / security settings are NEVER restored (LOCAL_ONLY_META).
-   * Returns true if data was found and written.
-   */
+  /* =================================================================
+     SECTION F — FIRESTORE RESTORE  (download cloud → local)
+     Returns true if data was found and written, false otherwise.
+     ================================================================= */
   async function doRestoreFromFirebase() {
     if (!currentUser || !db) return false;
-
-    setSyncStatus('syncing');
 
     try {
       var { doc, getDoc } = await import(FB_BASE + 'firebase-firestore.js');
 
-      var docRef = doc(db, 'users', currentUser.uid, 'appData', 'main');
-      var snap   = await getDoc(docRef);
+      var docRef  = doc(db, 'users', currentUser.uid, 'data', 'app_state');
+      var snap    = await getDoc(docRef);
 
-      if (!snap.exists()) {
-        setSyncStatus('synced');
-        return false;
-      }
+      if (!snap.exists()) return false;
 
       var data = snap.data();
-      if (!data || !Array.isArray(data.transactions)) {
-        setSyncStatus('synced');
-        return false;
-      }
+      await writeAllToIdb(data);
 
-      /* Wait for the app to have opened IndexedDB */
-      await waitForIdb();
-
-      /* --- Restore transactions --- */
-      await idbClear(STORES.TX);
-      for (var i = 0; i < data.transactions.length; i++) {
-        await idbPutDecoded(STORES.TX, data.transactions[i]);
-      }
-
-      /* --- Restore categories --- */
-      await idbClear(STORES.CATS);
-      for (var j = 0; j < (data.categories || []).length; j++) {
-        await idbPutDecoded(STORES.CATS, data.categories[j]);
-      }
-
-      /* --- Restore meta (skip security fields) --- */
-      for (var k = 0; k < (data.meta || []).length; k++) {
-        var m = data.meta[k];
-        if (LOCAL_ONLY_META.indexOf(m.key) === -1) {
-          await idbPutDecoded(STORES.META, m);
-        }
-      }
+      /* Update sync timestamp display */
+      var el = document.getElementById('clLastSyncTime');
+      if (el) el.textContent = 'Restored from: ' + new Date(data.syncedAt || Date.now()).toLocaleString();
 
       setSyncStatus('synced');
       return true;
-
     } catch (err) {
       console.error('[CoinLence Firebase] Restore error:', err);
       setSyncStatus('error');
-      return false;
+      throw err;
     }
   }
 
   /* =================================================================
-     SECTION E: DEVICE ID
-     ================================================================= */
-  function getDeviceId() {
-    var k  = '_cl_device_id';
-    var id = localStorage.getItem(k);
-    if (!id) {
-      id = Date.now().toString(36) + Math.random().toString(36).slice(2);
-      localStorage.setItem(k, id);
-    }
-    return id;
-  }
-
-  /* =================================================================
-     SECTION F: TOAST HELPER
-     Uses the existing #toastContainer from the original HTML.
-     ================================================================= */
-  function clToast(msg, type) {
-    type = type || 'info';
-    var c = document.getElementById('toastContainer');
-    if (!c) return;
-    var el = document.createElement('div');
-    el.className = 'toast ' + type;
-    el.textContent = msg;
-    c.appendChild(el);
-    setTimeout(function () {
-      el.classList.add('hide');
-      setTimeout(function () { el.remove(); }, 250);
-    }, 3000);
-  }
-
-  /* =================================================================
-     SECTION G: UI UPDATE HELPERS
+     SECTION G — UI STATE MANAGEMENT
      ================================================================= */
 
+  /* Show/hide auth form vs logged-in controls */
   function updateUserUI(user) {
-    var loginBtn    = document.getElementById('clGoogleLoginBtn');
-    var logoutBtn   = document.getElementById('clGoogleLogoutBtn');
-    var syncActions = document.getElementById('clSyncActions');
+    var authForm    = document.getElementById('clAuthForm');
     var userInfo    = document.getElementById('clUserInfo');
-    var userAvatar  = document.getElementById('clUserAvatar');
-    var userName    = document.getElementById('clUserName');
-    var userEmail   = document.getElementById('clUserEmail');
-    var headerAvatar = document.getElementById('clHeaderAvatar');
+    var syncActions = document.getElementById('clSyncActions');
+    var headerAvatar= document.getElementById('clHeaderAvatar');
+    var syncBadge   = document.getElementById('clSyncStatus');
 
     if (user) {
-      if (loginBtn)    loginBtn.style.display    = 'none';
-      if (logoutBtn)   logoutBtn.style.display   = 'inline-flex';
-      if (syncActions) syncActions.style.display = 'flex';
-      if (userInfo)    userInfo.style.display     = 'flex';
-      if (userAvatar && user.photoURL) {
-        userAvatar.src = user.photoURL;
-        userAvatar.onerror = function () { this.src = ''; };
+      /* ── Logged IN ── */
+      if (authForm)     authForm.style.display    = 'none';
+      if (userInfo)     userInfo.style.display     = 'flex';
+      if (syncActions)  syncActions.style.display  = 'flex';
+
+      /* Populate user card */
+      var nameEl  = document.getElementById('clUserName');
+      var emailEl = document.getElementById('clUserEmail');
+      var avatarEl= document.getElementById('clUserAvatar');
+      if (nameEl)  nameEl.textContent  = user.displayName || user.email || 'User';
+      if (emailEl) emailEl.textContent = user.email || '';
+      if (avatarEl && user.photoURL) {
+        avatarEl.src = user.photoURL;
+        avatarEl.style.display = 'block';
+      } else if (avatarEl) {
+        /* Fallback: show first letter */
+        avatarEl.src = '';
+        avatarEl.style.display = 'none';
+        /* Optionally show initials — skip to keep it simple */
       }
-      if (userName)    userName.textContent  = user.displayName || 'User';
-      if (userEmail)   userEmail.textContent = user.email || '';
-      if (headerAvatar) {
-        headerAvatar.src          = user.photoURL || '';
+
+      /* Header avatar */
+      if (headerAvatar && user.photoURL) {
+        headerAvatar.src           = user.photoURL;
         headerAvatar.style.display = 'block';
-        headerAvatar.onerror       = function () { this.style.display = 'none'; };
       }
-      /* Restore last-sync label from localStorage */
-      var stored = localStorage.getItem('_cl_last_sync_' + user.uid);
-      if (stored) updateLastSyncUI(parseInt(stored, 10));
+
+      /* Header sync badge */
+      if (syncBadge) syncBadge.style.display = 'inline-flex';
+
+      /* Restore last sync label */
+      var lastSync = localStorage.getItem('_cl_last_sync');
+      var syncEl   = document.getElementById('clLastSyncTime');
+      if (syncEl && lastSync) syncEl.textContent = 'Last synced: ' + lastSync;
 
     } else {
-      if (loginBtn)    loginBtn.style.display    = 'inline-flex';
-      if (logoutBtn)   logoutBtn.style.display   = 'none';
-      if (syncActions) syncActions.style.display = 'none';
-      if (userInfo)    userInfo.style.display     = 'none';
-      if (headerAvatar) headerAvatar.style.display = 'none';
-      setSyncStatus('hidden');
+      /* ── Logged OUT ── */
+      if (authForm)     authForm.style.display    = 'block';
+      if (userInfo)     userInfo.style.display     = 'none';
+      if (syncActions)  syncActions.style.display  = 'none';
+      if (headerAvatar) headerAvatar.style.display  = 'none';
+      if (syncBadge)    syncBadge.style.display     = 'none';
     }
   }
 
-  /* =================================================================
-     SECTION H: ONLINE / OFFLINE EVENTS
-     ================================================================= */
+  /* Update the header sync-status badge */
+  function setSyncStatus(status, label) {
+    var el = document.getElementById('clSyncStatus');
+    if (!el) return;
+    el.dataset.status = status;
+    var labels = {
+      syncing: '⟳ Syncing…',
+      synced : '✓ Synced',
+      offline: '⚡ Offline',
+      error  : '✕ Sync error'
+    };
+    el.textContent = label || labels[status] || status;
+  }
 
-  window.addEventListener('online', function () {
-    if (!currentUser) return;
-    if (pendingSync) {
-      pendingSync = false;
-      doSyncToFirebase().catch(function (err) {
-        console.warn('[CoinLence Firebase] Online sync error:', err);
-      });
-    } else {
-      setSyncStatus('synced');
-    }
-  });
-
-  window.addEventListener('offline', function () {
-    if (currentUser) setSyncStatus('offline');
-  });
-
-  /* Header avatar click → jump to Settings → Cloud Sync */
-  document.addEventListener('click', function (e) {
-    if (e.target && e.target.id === 'clHeaderAvatar') {
-      /* Navigate to settings tab — reuse app's existing nav */
-      var settingsBtn = document.querySelector('.nav-btn[data-nav="settings"]');
-      if (settingsBtn) settingsBtn.click();
-      /* Scroll to cloud card */
-      setTimeout(function () {
-        var card = document.getElementById('clCloudCard');
-        if (card) card.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      }, 150);
-    }
-  });
+  /* Friendly Firebase error → human message */
+  function firebaseErrMsg(err) {
+    var map = {
+      'auth/user-not-found'        : 'No account found. Creating new account…',
+      'auth/wrong-password'        : 'Incorrect password. Please try again.',
+      'auth/invalid-email'         : 'Invalid email address.',
+      'auth/email-already-in-use'  : 'Email already registered. Try logging in.',
+      'auth/weak-password'         : 'Password must be at least 6 characters.',
+      'auth/too-many-requests'     : 'Too many attempts. Please wait and try again.',
+      'auth/popup-closed-by-user'  : 'Sign-in popup was closed.',
+      'auth/network-request-failed': 'Network error. Check your connection.',
+      'auth/invalid-credential'    : 'Incorrect email or password. Please try again.'
+    };
+    return map[err.code] || (err.message || 'An error occurred.');
+  }
 
   /* =================================================================
-     SECTION I: FIREBASE INITIALIZATION (runs after DOMContentLoaded)
+     SECTION H — INIT Firebase + attach all event listeners
+     Runs after DOM is ready.
      ================================================================= */
-
-  document.addEventListener('DOMContentLoaded', function () {
-    initFirebase().catch(function (err) {
-      console.error('[CoinLence Firebase] Init failed:', err);
-    });
-  });
-
   async function initFirebase() {
+    /* Abort if no real config */
+    if (FIREBASE_CONFIG.apiKey === 'PASTE_YOUR_API_KEY_HERE') {
+      console.warn('[CoinLence Firebase] Config not set — cloud sync disabled.');
+      var authForm = document.getElementById('clAuthForm');
+      if (authForm) {
+        authForm.style.display = 'block';
+        authForm.innerHTML =
+          '<p class="cl-notice muted" style="text-align:center;padding:8px 0;">' +
+          '⚠️ Firebase not configured. Open index.html and fill in FIREBASE_CONFIG.' +
+          '</p>';
+      }
+      return;
+    }
 
-    /* ── Load Firebase App ── */
-    var { initializeApp }          = await import(FB_BASE + 'firebase-app.js');
+    /* Dynamic imports — Firebase v10 modular ESM */
+    var {
+      initializeApp
+    } = await import(FB_BASE + 'firebase-app.js');
+
     var {
       getAuth,
       GoogleAuthProvider,
       signInWithPopup,
+      signInWithEmailAndPassword,
+      createUserWithEmailAndPassword,
+      fetchSignInMethodsForEmail,
+      signOut,
       onAuthStateChanged,
-      signOut
-    }                               = await import(FB_BASE + 'firebase-auth.js');
+      browserLocalPersistence,
+      setPersistence
+    } = await import(FB_BASE + 'firebase-auth.js');
+
     var {
       getFirestore,
       enableIndexedDbPersistence,
       doc, setDoc, getDoc
-    }                               = await import(FB_BASE + 'firebase-firestore.js');
+    } = await import(FB_BASE + 'firebase-firestore.js');
 
-    /* ── Initialize ── */
+    /* ── Initialize app & services ── */
     firebaseApp = initializeApp(FIREBASE_CONFIG);
     auth        = getAuth(firebaseApp);
     db          = getFirestore(firebaseApp);
 
-    /* Enable offline persistence for Firestore itself
-       (separate from the app's own IndexedDB) */
+    /* Persist login across browser restarts */
+    await setPersistence(auth, browserLocalPersistence).catch(console.warn);
+
+    /* Firestore offline persistence (separate from app's IDB) */
     enableIndexedDbPersistence(db).catch(function (err) {
-      /* multi-tab: only one tab can have persistence — non-fatal */
       if (err.code !== 'failed-precondition' && err.code !== 'unimplemented') {
-        console.warn('[CoinLence Firebase] Persistence:', err.code);
+        console.warn('[CoinLence Firebase] Firestore persistence:', err.code);
       }
     });
 
@@ -1180,156 +1141,218 @@
       updateUserUI(user);
 
       if (user) {
-        var firstLoginKey = '_cl_first_login_' + user.uid;
-        var isFirstLogin  = !localStorage.getItem(firstLoginKey);
+        var firstKey = '_cl_first_login_' + user.uid;
+        var isFirst  = !localStorage.getItem(firstKey);
 
-        if (isFirstLogin) {
-          /* ── First login on this device → try to restore from cloud ── */
+        if (isFirst) {
+          /* First login on this device → check for cloud data */
           setSyncStatus('syncing');
           clToast('Checking for cloud backup…', 'info');
 
-          var restored = await doRestoreFromFirebase();
+          var restored = await doRestoreFromFirebase().catch(function () { return false; });
 
           if (restored) {
-            localStorage.setItem(firstLoginKey, '1');
+            localStorage.setItem(firstKey, '1');
             clToast('✅ Cloud data restored! Reloading…', 'success');
-            /* Brief delay so the user sees the toast */
-            setTimeout(function () { window.location.reload(); }, 2000);
+            setTimeout(function () { window.location.reload(); }, 2200);
           } else {
-            /* No cloud data — this is the primary device, push up */
-            localStorage.setItem(firstLoginKey, '1');
-            setSyncStatus(navigator.onLine ? 'synced' : 'offline');
+            localStorage.setItem(firstKey, '1');
             clToast('Signed in! Uploading local data to cloud…', 'info');
             if (navigator.onLine) {
               await doSyncToFirebase().catch(console.warn);
+            } else {
+              setSyncStatus('offline');
             }
           }
         } else {
-          /* ── Returning device — just sync outbound ── */
+          /* Returning device — push latest outbound */
           setSyncStatus(navigator.onLine ? 'synced' : 'offline');
           if (navigator.onLine) {
-            /* Small delay to let app finish loading first */
             setTimeout(function () {
-              doSyncToFirebase().catch(function (err) {
-                console.warn('[CoinLence Firebase] Login sync error:', err);
-              });
+              doSyncToFirebase().catch(console.warn);
             }, 1500);
           }
         }
       }
     });
 
-    /* ── Google Sign-In Button ── */
-    var loginBtn = document.getElementById('clGoogleLoginBtn');
-    if (loginBtn) {
-      loginBtn.addEventListener('click', async function () {
+    /* ──────────────────────────────────────────────────────────────
+       EVENT LISTENERS
+       ────────────────────────────────────────────────────────────── */
+
+    /* ── Email Login / Register ── */
+    var emailAuthBtn = document.getElementById('clEmailAuthBtn');
+    if (emailAuthBtn) {
+      emailAuthBtn.addEventListener('click', async function () {
+        var emailInput = document.getElementById('clEmailInput');
+        var passInput  = document.getElementById('clPasswordInput');
+        var email      = (emailInput ? emailInput.value : '').trim();
+        var password   = passInput ? passInput.value : '';
+
+        /* Validate */
+        if (!email) { clToast('Please enter your email address.', 'error'); return; }
+        if (!password) { clToast('Please enter a password.', 'error'); return; }
+        if (password.length < 6) { clToast('Password must be at least 6 characters.', 'error'); return; }
+
+        emailAuthBtn.disabled    = true;
+        emailAuthBtn.textContent = 'Please wait…';
+
         try {
-          loginBtn.disabled = true;
-          loginBtn.textContent = 'Signing in…';
-          var provider = new GoogleAuthProvider();
-          await signInWithPopup(auth, provider);
-          clToast('Signed in with Google!', 'success');
+          /* Check if email already has an account */
+          var methods = await fetchSignInMethodsForEmail(auth, email).catch(function () { return []; });
+
+          if (methods && methods.length > 0) {
+            /* ── Existing account → Login ── */
+            await signInWithEmailAndPassword(auth, email, password);
+            clToast('✅ Logged in successfully!', 'success');
+          } else {
+            /* ── New account → Register ── */
+            await createUserWithEmailAndPassword(auth, email, password);
+            clToast('✅ Account created & logged in!', 'success');
+          }
+
+          /* Clear inputs */
+          if (emailInput) emailInput.value = '';
+          if (passInput)  passInput.value  = '';
+
         } catch (err) {
-          console.error('[CoinLence Firebase] Login error:', err);
-          var msg = err.code === 'auth/popup-closed-by-user'
-            ? 'Sign-in popup closed.'
-            : ('Sign-in failed: ' + (err.message || err.code));
-          clToast(msg, 'error');
-          loginBtn.disabled = false;
-          loginBtn.innerHTML = '&#8203;' /* reset text via innerHTML after icon SVG */;
-          /* Re-inject Google SVG + text */
-          loginBtn.innerHTML =
-            '<svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true">' +
-            '<path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>' +
-            '<path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>' +
-            '<path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>' +
-            '<path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.18 1.48-4.97 2.31-8.16 2.31-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>' +
-            '</svg>Sign in with Google';
+          clToast(firebaseErrMsg(err), 'error');
+          console.error('[CoinLence Firebase] Email auth error:', err);
+        } finally {
+          emailAuthBtn.disabled    = false;
+          emailAuthBtn.textContent = 'Login / Register';
         }
       });
     }
 
-    /* ── Sign-Out Button ── */
+    /* ── Google Sign-In ── */
+    var googleBtn = document.getElementById('clGoogleLoginBtn');
+    if (googleBtn) {
+      googleBtn.addEventListener('click', async function () {
+        googleBtn.disabled = true;
+        var originalHTML   = googleBtn.innerHTML;
+        googleBtn.innerHTML = '<span style="opacity:.7">Signing in…</span>';
+
+        try {
+          var provider = new GoogleAuthProvider();
+          /* Prompt account chooser so all saved accounts appear */
+          provider.setCustomParameters({ prompt: 'select_account' });
+          await signInWithPopup(auth, provider);
+          clToast('✅ Signed in with Google!', 'success');
+        } catch (err) {
+          clToast(firebaseErrMsg(err), 'error');
+          console.error('[CoinLence Firebase] Google sign-in error:', err);
+          googleBtn.disabled = false;
+          googleBtn.innerHTML = originalHTML;
+        }
+      });
+    }
+
+    /* ── Manual Backup ── */
+    var backupBtn = document.getElementById('clManualBackupBtn');
+    if (backupBtn) {
+      backupBtn.addEventListener('click', async function () {
+        if (!currentUser) { clToast('Please sign in first.', 'error'); return; }
+        if (!navigator.onLine) { clToast('No internet connection.', 'error'); return; }
+        backupBtn.disabled    = true;
+        backupBtn.textContent = 'Backing up…';
+        try {
+          await doSyncToFirebase();
+          clToast('☁️ Backup complete!', 'success');
+        } catch (err) {
+          clToast('Backup failed: ' + firebaseErrMsg(err), 'error');
+        } finally {
+          backupBtn.disabled    = false;
+          backupBtn.textContent = '☁️ Backup';
+        }
+      });
+    }
+
+    /* ── Manual Restore ── */
+    var restoreBtn = document.getElementById('clManualRestoreBtn');
+    if (restoreBtn) {
+      restoreBtn.addEventListener('click', async function () {
+        if (!currentUser) { clToast('Please sign in first.', 'error'); return; }
+        if (!navigator.onLine) { clToast('No internet connection.', 'error'); return; }
+
+        var confirmed = confirm(
+          'Restore from cloud?\n\n' +
+          'This will OVERWRITE your local transactions, categories, and ' +
+          'display settings with your cloud backup.\n\n' +
+          'Your PIN and security settings are NEVER changed by restore.\n\n' +
+          'The app will reload after restore. Continue?'
+        );
+        if (!confirmed) return;
+
+        restoreBtn.disabled    = true;
+        restoreBtn.textContent = 'Restoring…';
+        try {
+          var ok = await doRestoreFromFirebase();
+          if (ok) {
+            clToast('✅ Data restored! Reloading…', 'success');
+            setTimeout(function () { window.location.reload(); }, 2000);
+          } else {
+            clToast('No cloud backup found for this account.', 'info');
+            restoreBtn.disabled    = false;
+            restoreBtn.textContent = '⬇️ Restore';
+          }
+        } catch (err) {
+          clToast('Restore failed: ' + firebaseErrMsg(err), 'error');
+          restoreBtn.disabled    = false;
+          restoreBtn.textContent = '⬇️ Restore';
+        }
+      });
+    }
+
+    /* ── Sign Out ── */
     var logoutBtn = document.getElementById('clGoogleLogoutBtn');
     if (logoutBtn) {
       logoutBtn.addEventListener('click', async function () {
+        logoutBtn.disabled = true;
         try {
-          /* Final sync before signing out */
+          /* Final sync before sign-out */
           if (navigator.onLine && currentUser) {
             setSyncStatus('syncing');
             await doSyncToFirebase().catch(console.warn);
           }
           await signOut(auth);
           currentUser = null;
-          clToast('Signed out from Google.', 'info');
+          clToast('Signed out from cloud sync.', 'info');
         } catch (err) {
-          clToast('Sign-out failed: ' + (err.message || err.code), 'error');
-        }
-      });
-    }
-
-    /* ── Manual Backup Button ── */
-    var backupBtn = document.getElementById('clManualBackupBtn');
-    if (backupBtn) {
-      backupBtn.addEventListener('click', async function () {
-        if (!currentUser) {
-          clToast('Sign in with Google first.', 'error');
-          return;
-        }
-        if (!navigator.onLine) {
-          clToast('No internet connection.', 'error');
-          return;
-        }
-        backupBtn.disabled = true;
-        try {
-          await doSyncToFirebase();
-          clToast('☁️ Backup complete!', 'success');
-        } catch (err) {
-          clToast('Backup failed: ' + (err.message || err.code), 'error');
+          clToast('Sign-out failed: ' + firebaseErrMsg(err), 'error');
         } finally {
-          backupBtn.disabled = false;
+          logoutBtn.disabled = false;
         }
       });
     }
 
-    /* ── Manual Restore Button ── */
-    var restoreBtn = document.getElementById('clManualRestoreBtn');
-    if (restoreBtn) {
-      restoreBtn.addEventListener('click', async function () {
-        if (!currentUser) {
-          clToast('Sign in with Google first.', 'error');
-          return;
-        }
-        if (!navigator.onLine) {
-          clToast('No internet connection.', 'error');
-          return;
-        }
-        if (!confirm(
-          'Restore from cloud?\n\n' +
-          'This will OVERWRITE your local transactions, categories, and display settings ' +
-          'with your cloud backup.\n\n' +
-          'Your PIN and security settings are NEVER changed.\n\n' +
-          'The app will reload after restore. Continue?'
-        )) return;
-
-        restoreBtn.disabled = true;
-        try {
-          var restored = await doRestoreFromFirebase();
-          if (restored) {
-            clToast('✅ Data restored! Reloading…', 'success');
-            setTimeout(function () { window.location.reload(); }, 2000);
-          } else {
-            clToast('No cloud backup found for your account.', 'info');
-            restoreBtn.disabled = false;
-          }
-        } catch (err) {
-          clToast('Restore failed: ' + (err.message || err.code), 'error');
-          restoreBtn.disabled = false;
-        }
+    /* ── Header avatar click → jump to Cloud Sync settings ── */
+    var headerAvatar = document.getElementById('clHeaderAvatar');
+    if (headerAvatar) {
+      headerAvatar.addEventListener('click', function () {
+        /* Navigate to settings view */
+        var settingsBtn = document.querySelector('[data-nav="settings"]');
+        if (settingsBtn) settingsBtn.click();
+        /* Scroll cloud card into view */
+        setTimeout(function () {
+          var card = document.getElementById('clCloudCard');
+          if (card) card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }, 200);
       });
     }
 
   } /* end initFirebase */
+
+  /* =================================================================
+     SECTION I — BOOT
+     Wait for DOM then launch Firebase.
+     ================================================================= */
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initFirebase);
+  } else {
+    /* DOM already ready */
+    setTimeout(initFirebase, 0);
+  }
 
 })(); /* end IIFE */
 
@@ -1337,21 +1360,17 @@
 =======================================================================
   FIRESTORE SECURITY RULES
   ──────────────────────────────────────────────────────────────────────
-  Copy and paste these rules into:
-  Firebase Console → Firestore Database → Rules tab → Publish
-
-  These rules ensure each user can ONLY read and write their OWN data.
-=======================================================================
+  Copy → Firebase Console → Firestore Database → Rules → Publish
 
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Each user can only access their own document tree
+    // Each user can only read and write their own data
     match /users/{userId}/{document=**} {
       allow read, write: if
-        request.auth != null &&        // Must be authenticated
-        request.auth.uid == userId;    // Must be the document's owner
+        request.auth != null &&
+        request.auth.uid == userId;
     }
 
     // Deny all other paths
@@ -1360,12 +1379,11 @@ service cloud.firestore {
     }
   }
 }
-
 =======================================================================
 */
 </script>
 
-<!-- ORIGINAL script.js — COMPLETELY UNTOUCHED, not modified at all -->
+<!-- ORIGINAL script.js — completely untouched -->
 <script src="script.js"></script>
 <script>
 if ('serviceWorker' in navigator) {
