@@ -4,381 +4,620 @@
    ============================================================= */
 
 /* =============================================================
-   ██████╗ ██████╗  ██████╗ ██████╗ ██╗   ██╗ ██████╗████████╗██╗ ██████╗ ███╗   ██╗
-   NOTE: ALL original code is 100% preserved below.
-   Firebase sync is ADDED ONLY — nothing existing is modified.
-   Architecture:
-     Local Storage / IndexedDB  ← primary (unchanged)
-           ↓  (after every local write)
-     Background Sync Engine     ← new, non-blocking
-           ↓
-     Firebase Firestore         ← backup / restore / multi-device
-   ============================================================= */
-
-/* =============================================================
-   [NEW] ── FIREBASE CONFIGURATION
+   ARCHITECTURE
    ─────────────────────────────────────────────────────────────
-   SETUP INSTRUCTIONS:
-   1. Go to https://console.firebase.google.com
-   2. Create a project (or use existing).
-   3. Enable Authentication → Sign-in methods → Google.
-   4. Enable Firestore Database (start in production mode).
-   5. Replace the values below with YOUR project's config
-      (Project Settings → Your apps → Firebase SDK snippet).
-   6. Add Firestore Security Rules (see bottom of this file).
+   Local Storage / IndexedDB  ← PRIMARY (unchanged, always on)
+         ↓  (non-blocking, after every local write)
+   Background Sync Engine     ← debounced, queue-safe
+         ↓
+   Firebase Firestore          ← backup / restore / multi-device
+
+   RULES:
+   • IndexedDB / localStorage is ALWAYS the source of truth.
+   • Firebase is a cloud backup layer ONLY.
+   • If Firebase fails for any reason, the app keeps working.
+   • Sensitive data (PIN, recovery key) is NEVER uploaded.
    ============================================================= */
-   // For Firebase JS SDK v7.20.0 and later, measurementId is optional
-const firebaseConfig = {
-  apiKey: "AIzaSyDBLeK-F1TJJEDx_Hysjor4t4W_FkhpwQ4",
-  authDomain: "coinlence.firebaseapp.com",
-  projectId: "coinlence",
-  storageBucket: "coinlence.firebasestorage.app",
-  messagingSenderId: "823207118121",
-  appId: "1:823207118121:web:d6eb4afd305ccf529ee338",
-  measurementId: "G-CMQRPSBTXH"
-};
+
 
 /* =============================================================
-   [NEW] ── FIREBASE SDK LOADER
-   Loads Firebase modules dynamically so the app still works
-   fully offline if Firebase fails to load.
+   ██████╗  █████╗ ██████╗ ████████╗    ██╗
+   ██╔══██╗██╔══██╗██╔══██╗╚══██╔══╝   ███║
+   ██████╔╝███████║██████╔╝   ██║       ╚██║
+   ██╔═══╝ ██╔══██║██╔══██╗   ██║        ██║
+   ██║     ██║  ██║██║  ██║   ██║        ██║
+   ╚═╝     ╚═╝  ╚═╝╚═╝  ╚═╝   ╚═╝        ╚═╝
+   FIREBASE v10 — COMPLETE REBUILD
    ============================================================= */
-let _firebaseApp       = null;
-let _firebaseAuth      = null;
-let _firebaseFirestore = null;
-let _currentUser       = null;   // authenticated Firebase user
-let _syncPending       = false;  // debounce flag
-let _syncTimer         = null;   // debounce timer id
-let _syncQueue         = [];     // operations queued while offline
-let _isOnline          = navigator.onLine;
 
-// Sync status values: 'idle' | 'syncing' | 'synced' | 'offline' | 'error'
-let _syncStatus        = 'idle';
+/* =============================================================
+   FIREBASE CONFIGURATION
+   ─────────────────────────────────────────────────────────────
+   Replace the values below with YOUR Firebase project config.
+   Firebase Console → Project Settings → Your apps → SDK snippet
+   ─────────────────────────────────────────────────────────────
+   SETUP CHECKLIST:
+   ✅ 1. Replace config values below
+   ✅ 2. Firebase Console → Authentication → Sign-in method:
+          Enable: Google  AND  Email/Password
+   ✅ 3. Firebase Console → Authentication → Settings →
+          Authorized domains: add your domain
+   ✅ 4. Firebase Console → Firestore Database → Rules:
+          (paste Firestore rules from the bottom of this file)
+   ============================================================= */
+<script type="module">
+  // Import the functions you need from the SDKs you need
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-app.js";
+  import { getAnalytics } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-analytics.js";
+  // TODO: Add SDKs for Firebase products that you want to use
+  // https://firebase.google.com/docs/web/setup#available-libraries
 
-/**
- * [NEW] Dynamically imports Firebase modules from CDN.
- * Falls back gracefully if network is unavailable.
- */
-async function loadFirebase() {
+  // Your web app's Firebase configuration
+  // For Firebase JS SDK v7.20.0 and later, measurementId is optional
+  const firebaseConfig = {
+    apiKey: "AIzaSyCTvEEsHo2ymrbpayFPRpUbj5bQ_ac46WY",
+    authDomain: "coinlence-5bc32.firebaseapp.com",
+    projectId: "coinlence-5bc32",
+    storageBucket: "coinlence-5bc32.firebasestorage.app",
+    messagingSenderId: "375309668180",
+    appId: "1:375309668180:web:10dce875d6ddc24835c2c1",
+    measurementId: "G-DDVZ4ENZHJ"
+  };
+
+  // Initialize Firebase
+  const app = initializeApp(firebaseConfig);
+  const analytics = getAnalytics(app);
+</script>
+
+/* =============================================================
+   FIREBASE STATE
+   All Firebase-related variables are prefixed _fb to avoid
+   any conflict with the existing app globals.
+   ============================================================= */
+let _fbApp        = null;   // Firebase App instance
+let _fbAuth       = null;   // Auth module bundle
+let _fbDb         = null;   // Firestore module bundle
+let _fbUser       = null;   // Currently signed-in user (or null)
+let _fbOnline     = navigator.onLine;
+let _fbSyncing    = false;  // True while a Firestore write is in flight
+let _fbSyncTimer  = null;   // Debounce timer for auto-sync
+let _fbSyncQueue  = false;  // True if a sync was missed while offline
+let _fbAuthReady  = false;  // True once onAuthStateChanged has fired once
+
+/* =============================================================
+   FIREBASE LOADER
+   Dynamically imports Firebase v10 ES modules from the CDN.
+   If the network is unavailable, the app continues offline.
+   ============================================================= */
+async function fbLoad() {
   try {
-    const { initializeApp }         = await import('https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js');
-    const { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged }
-                                     = await import('https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js');
-    const { getFirestore, doc, setDoc, getDoc, collection, writeBatch, getDocs, serverTimestamp }
-                                     = await import('https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js');
-
-    _firebaseApp       = initializeApp(FIREBASE_CONFIG);
-    _firebaseAuth      = {
-      instance: getAuth(_firebaseApp),
+    // ── Import Firebase modules from CDN (v10 modular SDK)
+    const { initializeApp } = await import(
+      'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js'
+    );
+    const {
+      getAuth,
       GoogleAuthProvider,
       signInWithPopup,
+      signInWithEmailAndPassword,
+      createUserWithEmailAndPassword,
+      signOut,
+      onAuthStateChanged,
+      browserLocalPersistence,
+      setPersistence
+    } = await import(
+      'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js'
+    );
+    const {
+      getFirestore,
+      doc,
+      setDoc,
+      getDoc,
+      getDocs,
+      collection,
+      writeBatch,
+      serverTimestamp
+    } = await import(
+      'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js'
+    );
+
+    // ── Initialise app
+    _fbApp = initializeApp(FIREBASE_CONFIG);
+
+    // ── Bundle auth helpers
+    const authInstance = getAuth(_fbApp);
+    // Persist session across page reloads
+    await setPersistence(authInstance, browserLocalPersistence);
+
+    _fbAuth = {
+      instance: authInstance,
+      GoogleAuthProvider,
+      signInWithPopup,
+      signInWithEmailAndPassword,
+      createUserWithEmailAndPassword,
       signOut,
       onAuthStateChanged
     };
-    _firebaseFirestore = {
-      instance: getFirestore(_firebaseApp),
-      doc, setDoc, getDoc, collection, writeBatch, getDocs, serverTimestamp
+
+    // ── Bundle Firestore helpers
+    _fbDb = {
+      instance: getFirestore(_fbApp),
+      doc, setDoc, getDoc, getDocs, collection, writeBatch, serverTimestamp
     };
 
-    // Listen for auth state changes
-    _firebaseAuth.onAuthStateChanged(_firebaseAuth.instance, async (user) => {
-      _currentUser = user;
+    // ── Watch auth state (fires immediately on load if session exists)
+    _fbAuth.onAuthStateChanged(_fbAuth.instance, async (user) => {
+      _fbUser    = user;
+      _fbAuthReady = true;
+
       if (user) {
-        updateSyncUI('syncing');
-        renderCloudUserInfo(user);
-        await cloudRestoreIfEmpty();
-        updateSyncUI('synced');
+        fbUpdateSyncStatus('syncing');
+        fbRenderLoggedIn(user);
+        await fbRestoreOrPush();
+        fbUpdateSyncStatus('synced');
       } else {
-        renderCloudUserInfo(null);
-        updateSyncUI('idle');
+        fbRenderLoggedOut();
+        fbUpdateSyncStatus('idle');
       }
     });
 
-    // Network status watchers
-    window.addEventListener('online',  () => { _isOnline = true;  updateSyncUI(_currentUser ? 'synced' : 'idle'); flushSyncQueue(); });
-    window.addEventListener('offline', () => { _isOnline = false; updateSyncUI('offline'); });
+    // ── Network watchers
+    window.addEventListener('online',  () => {
+      _fbOnline = true;
+      fbUpdateSyncStatus(_fbUser ? 'synced' : 'idle');
+      if (_fbSyncQueue && _fbUser) {
+        _fbSyncQueue = false;
+        fbSync();
+      }
+    });
+    window.addEventListener('offline', () => {
+      _fbOnline = false;
+      fbUpdateSyncStatus('offline');
+    });
 
-    injectFirebaseUI();
-    console.log('[CoinLence] Firebase loaded successfully.');
+    // ── Hook MutationObserver to auto-sync after local writes
+    fbHookMutationObserver();
+
+    console.log('[CoinLence] Firebase v10 loaded.');
   } catch (err) {
-    // Firebase failed to load (offline on first load, or blocked).
-    // App continues working fully offline.
-    console.warn('[CoinLence] Firebase unavailable — running offline-only mode.', err);
-    updateSyncUI('offline');
+    // Firebase unavailable — app works fully offline
+    console.warn('[CoinLence] Firebase unavailable (offline-only mode).', err);
+    fbUpdateSyncStatus('offline');
   }
 }
 
 /* =============================================================
-   [NEW] ── SYNC STATUS INDICATOR
-   Injects a small badge into the app header showing sync state.
+   SYNC STATUS BADGE
+   A small badge in the header that reflects sync state.
+   Status values: 'idle' | 'syncing' | 'synced' | 'offline' | 'error'
    ============================================================= */
-function injectFirebaseUI() {
-  const header = document.querySelector('.header-actions');
-  if (!header) return;
+let _fbLastSyncedAt = null; // Timestamp of last successful sync
 
-  // Sync status badge
-  const badge = document.createElement('span');
-  badge.id = 'syncBadge';
-  badge.style.cssText = `
-    font-size: 11px;
-    padding: 2px 8px;
-    border-radius: 20px;
-    font-weight: 600;
-    letter-spacing: 0.3px;
-    transition: background 0.3s, color 0.3s;
-    cursor: default;
-    user-select: none;
-    align-self: center;
-  `;
-  header.insertBefore(badge, header.firstChild);
-
-  // Google login button
-  const loginBtn = document.createElement('button');
-  loginBtn.id        = 'googleLoginBtn';
-  loginBtn.className = 'icon-btn';
-  loginBtn.title     = 'Sign in with Google';
-  loginBtn.innerHTML = '☁️';
-  loginBtn.addEventListener('click', handleGoogleLogin);
-  header.insertBefore(loginBtn, header.firstChild);
-
-  updateSyncUI('idle');
-}
-
-/**
- * [NEW] Updates the sync status badge appearance and tooltip.
- */
-function updateSyncUI(status) {
-  _syncStatus = status;
-  const badge = document.getElementById('syncBadge');
-  const btn   = document.getElementById('googleLoginBtn');
+function fbUpdateSyncStatus(status) {
+  const badge = document.getElementById('fbSyncBadge');
   if (!badge) return;
 
-  const map = {
-    idle:    { text: '',         bg: 'transparent',           color: 'transparent' },
-    syncing: { text: '↻ Syncing', bg: 'rgba(91,140,255,0.18)', color: '#5b8cff'   },
-    synced:  { text: '✓ Synced',  bg: 'rgba(46,204,113,0.18)', color: '#2ecc71'   },
-    offline: { text: '○ Offline', bg: 'rgba(255,92,92,0.15)',  color: '#ff5c5c'   },
-    error:   { text: '⚠ Error',   bg: 'rgba(255,181,71,0.18)', color: '#ffb547'   }
-  };
-  const s = map[status] || map.idle;
-  badge.textContent        = s.text;
-  badge.style.background   = s.bg;
-  badge.style.color        = s.color;
+  if (status === 'synced') _fbLastSyncedAt = Date.now();
 
-  // Update login button tooltip
-  if (btn) {
-    btn.title = _currentUser
-      ? `Signed in as ${_currentUser.email} (click to sign out)`
-      : 'Sign in with Google for cloud sync';
-    btn.innerHTML = _currentUser
-      ? (_currentUser.photoURL
-          ? `<img src="${_currentUser.photoURL}" style="width:22px;height:22px;border-radius:50%;vertical-align:middle;">`
-          : '👤')
-      : '☁️';
+  const MAP = {
+    idle:    { label: '',            bg: 'transparent',            color: 'transparent'  },
+    syncing: { label: '↻ Syncing',   bg: 'rgba(91,140,255,0.18)',  color: '#5b8cff'      },
+    synced:  { label: '✓ Synced',    bg: 'rgba(46,204,113,0.18)',  color: '#2ecc71'      },
+    offline: { label: '○ Offline',   bg: 'rgba(255,92,92,0.15)',   color: '#ff5c5c'      },
+    error:   { label: '⚠ Error',     bg: 'rgba(255,181,71,0.18)',  color: '#ffb547'      }
+  };
+  const s = MAP[status] || MAP.idle;
+  badge.textContent      = s.label;
+  badge.style.background = s.bg;
+  badge.style.color      = s.color;
+
+  // Update "Last synced" text inside the settings card
+  const lastSyncEl = document.getElementById('fbLastSyncText');
+  if (lastSyncEl && _fbLastSyncedAt) {
+    const mins = Math.round((Date.now() - _fbLastSyncedAt) / 60000);
+    lastSyncEl.textContent = mins < 1 ? 'Last synced: just now' : `Last synced: ${mins} min ago`;
   }
 }
 
 /* =============================================================
-   [NEW] ── GOOGLE SIGN-IN / SIGN-OUT
+   CLOUD SYNC SETTINGS CARD
+   Injected once into the existing Settings view.
+   Shows auth form when logged out, user info + controls when in.
    ============================================================= */
-async function handleGoogleLogin() {
-  if (!_firebaseAuth) {
-    toast('Firebase not loaded. Check your internet connection.', 'error');
-    return;
-  }
-  if (_currentUser) {
-    // Already signed in → offer sign-out
-    confirmAction(
-      'Sign out?',
-      `You are signed in as ${_currentUser.email}. Cloud sync will pause until you sign in again.`,
-      async () => {
-        try {
-          await _firebaseAuth.signOut(_firebaseAuth.instance);
-          _currentUser = null;
-          renderCloudUserInfo(null);
-          updateSyncUI('idle');
-          toast('Signed out from Google account', 'info');
-        } catch (e) {
-          toast('Sign-out failed: ' + e.message, 'error');
-        }
-      }
-    );
-    return;
+function fbInjectSettingsCard() {
+  const settingsView = document.getElementById('view-settings');
+  if (!settingsView || document.getElementById('fbCloudSyncCard')) return;
+
+  // Insert before the last card (About)
+  const cards     = settingsView.querySelectorAll('.card.settings-card');
+  const aboutCard = cards[cards.length - 1];
+
+  const card = document.createElement('div');
+  card.className = 'card settings-card';
+  card.id = 'fbCloudSyncCard';
+
+  card.innerHTML = `
+    <h4>☁️ Cloud Sync</h4>
+
+    <!-- ── LOGGED-OUT STATE ── -->
+    <div id="fbAuthPanel">
+      <p class="fb-hint">Sign in to back up your data across devices.</p>
+
+      <div class="fb-field-group">
+        <input id="fbEmail"    type="email"    class="fb-input" placeholder="Email address" autocomplete="email" />
+        <input id="fbPassword" type="password" class="fb-input" placeholder="Password (min 6 chars)" autocomplete="current-password" />
+        <button class="btn btn-block" id="fbEmailAuthBtn">Login / Register</button>
+      </div>
+
+      <div class="fb-divider"><span>or</span></div>
+
+      <button class="btn btn-block fb-google-btn" id="fbGoogleBtn">
+        <svg width="18" height="18" viewBox="0 0 48 48" style="vertical-align:middle;margin-right:8px;">
+          <path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9.1 3.2l6.8-6.8C35.9 2.4 30.3 0 24 0 14.8 0 6.9 5.5 3.2 13.5l7.9 6.1C13 13.7 18.1 9.5 24 9.5z"/>
+          <path fill="#4285F4" d="M46.5 24.5c0-1.6-.1-3.2-.4-4.7H24v9h12.7c-.6 3-2.3 5.5-4.8 7.2l7.5 5.8c4.4-4.1 7.1-10.1 7.1-17.3z"/>
+          <path fill="#FBBC05" d="M11.1 28.6A14.5 14.5 0 0 1 9.5 24c0-1.6.3-3.1.8-4.5L2.4 13.5A23.9 23.9 0 0 0 0 24c0 3.8.9 7.4 2.4 10.6l8.7-6z"/>
+          <path fill="#34A853" d="M24 48c6.3 0 11.7-2.1 15.6-5.7l-7.5-5.8c-2.1 1.4-4.8 2.2-8.1 2.2-6 0-11-4-12.9-9.4l-8.7 6C6.9 42.5 14.8 48 24 48z"/>
+        </svg>
+        Continue with Google
+      </button>
+    </div>
+
+    <!-- ── LOGGED-IN STATE ── -->
+    <div id="fbUserPanel" style="display:none;">
+      <div id="fbUserInfo" class="fb-user-info"></div>
+      <div id="fbSyncStatusText" class="fb-status-text"></div>
+      <p id="fbLastSyncText" class="fb-hint" style="margin-top:4px;"></p>
+      <div class="fb-btn-row">
+        <button class="btn" id="fbBackupNowBtn">⬆ Backup Now</button>
+        <button class="btn" id="fbRestoreBtn">⬇ Restore</button>
+      </div>
+      <button class="btn btn-block fb-logout-btn" id="fbLogoutBtn" style="margin-top:8px;">Sign Out</button>
+    </div>
+
+    <p class="fb-hint" style="margin-top:12px;">
+      Data syncs automatically after changes. PIN &amp; recovery key are never uploaded.
+    </p>
+  `;
+
+  settingsView.insertBefore(card, aboutCard);
+
+  // ── Wire up events (once, no duplicates)
+  document.getElementById('fbGoogleBtn').addEventListener('click',    fbHandleGoogleLogin);
+  document.getElementById('fbEmailAuthBtn').addEventListener('click', fbHandleEmailAuth);
+  document.getElementById('fbLogoutBtn').addEventListener('click',    fbHandleLogout);
+  document.getElementById('fbBackupNowBtn').addEventListener('click', fbHandleManualBackup);
+  document.getElementById('fbRestoreBtn').addEventListener('click',   fbHandleManualRestore);
+
+  // ── Inject sync badge into header (once)
+  const header = document.querySelector('.header-actions');
+  if (header && !document.getElementById('fbSyncBadge')) {
+    const badge = document.createElement('span');
+    badge.id = 'fbSyncBadge';
+    badge.style.cssText = `
+      font-size: 11px;
+      padding: 2px 8px;
+      border-radius: 20px;
+      font-weight: 600;
+      letter-spacing: 0.3px;
+      transition: background 0.3s, color 0.3s;
+      cursor: default;
+      user-select: none;
+      align-self: center;
+    `;
+    header.insertBefore(badge, header.firstChild);
   }
 
-  try {
-    updateSyncUI('syncing');
-    const provider = new _firebaseAuth.GoogleAuthProvider();
-    await _firebaseAuth.signInWithPopup(_firebaseAuth.instance, provider);
-    // onAuthStateChanged will handle the rest
-    toast('Signed in with Google ✓', 'success');
-  } catch (e) {
-    updateSyncUI('error');
-    if (e.code !== 'auth/popup-closed-by-user') {
-      toast('Google sign-in failed: ' + e.message, 'error');
-    }
-  }
+  fbUpdateSyncStatus('idle');
 }
 
-/**
- * [NEW] Renders a small user info chip in Settings → Cloud Sync card.
- */
-function renderCloudUserInfo(user) {
-  const el = document.getElementById('cloudUserInfo');
-  if (!el) return;
-  if (user) {
-    el.innerHTML = `
-      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
-        ${user.photoURL ? `<img src="${user.photoURL}" style="width:36px;height:36px;border-radius:50%;">` : ''}
+/* =============================================================
+   AUTH UI RENDERERS
+   ============================================================= */
+function fbRenderLoggedIn(user) {
+  const authPanel = document.getElementById('fbAuthPanel');
+  const userPanel = document.getElementById('fbUserPanel');
+  const userInfo  = document.getElementById('fbUserInfo');
+  const statusEl  = document.getElementById('fbSyncStatusText');
+
+  if (authPanel) authPanel.style.display = 'none';
+  if (userPanel) userPanel.style.display = 'block';
+
+  if (userInfo) {
+    const name = fbEscape(user.displayName || 'User');
+    const email = fbEscape(user.email || '');
+    const avatar = user.photoURL
+      ? `<img src="${user.photoURL}" alt="avatar" class="fb-avatar">`
+      : `<span class="fb-avatar-placeholder">👤</span>`;
+    userInfo.innerHTML = `
+      <div class="fb-user-row">
+        ${avatar}
         <div>
-          <div style="font-weight:600;">${escapeHtml(user.displayName || 'User')}</div>
-          <div style="font-size:12px;opacity:0.7;">${escapeHtml(user.email)}</div>
+          <div class="fb-user-name">${name}</div>
+          <div class="fb-user-email">${email}</div>
         </div>
       </div>
     `;
+  }
+
+  if (statusEl) statusEl.textContent = _fbOnline ? '● Connected' : '○ Offline';
+}
+
+function fbRenderLoggedOut() {
+  const authPanel = document.getElementById('fbAuthPanel');
+  const userPanel = document.getElementById('fbUserPanel');
+
+  if (authPanel) authPanel.style.display = 'block';
+  if (userPanel) userPanel.style.display = 'none';
+}
+
+/* =============================================================
+   AUTHENTICATION HANDLERS
+   ============================================================= */
+
+/**
+ * Google sign-in via popup.
+ * Shows all saved Google accounts on device/browser.
+ */
+async function fbHandleGoogleLogin() {
+  if (!_fbAuth) {
+    fbToast('Firebase not loaded — check your connection.', 'error');
+    return;
+  }
+  try {
+    fbUpdateSyncStatus('syncing');
+    const provider = new _fbAuth.GoogleAuthProvider();
+    // Force account chooser so user can pick from saved accounts
+    provider.setCustomParameters({ prompt: 'select_account' });
+    await _fbAuth.signInWithPopup(_fbAuth.instance, provider);
+    // onAuthStateChanged handles the rest
+  } catch (err) {
+    fbUpdateSyncStatus('error');
+    if (err.code !== 'auth/popup-closed-by-user') {
+      fbToast('Google sign-in failed: ' + err.message, 'error');
+    }
+  }
+}
+
+/**
+ * Email + password login.
+ * If account doesn't exist → automatically registers it.
+ * Validates fields and shows clear errors using the existing toast system.
+ */
+async function fbHandleEmailAuth() {
+  if (!_fbAuth) {
+    fbToast('Firebase not loaded — check your connection.', 'error');
+    return;
+  }
+
+  const emailEl = document.getElementById('fbEmail');
+  const passEl  = document.getElementById('fbPassword');
+  const email   = (emailEl?.value || '').trim();
+  const pass    = (passEl?.value || '');
+
+  // ── Validation
+  if (!email) { fbToast('Please enter your email address.', 'error'); return; }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    fbToast('Please enter a valid email address.', 'error'); return;
+  }
+  if (!pass) { fbToast('Please enter a password.', 'error'); return; }
+  if (pass.length < 6) { fbToast('Password must be at least 6 characters.', 'error'); return; }
+
+  try {
+    fbUpdateSyncStatus('syncing');
+    // Try login first
+    await _fbAuth.signInWithEmailAndPassword(_fbAuth.instance, email, pass);
+    fbToast('Signed in successfully ✓', 'success');
+    if (passEl) passEl.value = '';
+    // onAuthStateChanged handles the rest
+  } catch (loginErr) {
+    if (
+      loginErr.code === 'auth/user-not-found' ||
+      loginErr.code === 'auth/invalid-credential' ||
+      loginErr.code === 'auth/invalid-email'
+    ) {
+      // Account doesn't exist → register automatically
+      try {
+        await _fbAuth.createUserWithEmailAndPassword(_fbAuth.instance, email, pass);
+        fbToast('Account created & signed in ✓', 'success');
+        if (passEl) passEl.value = '';
+      } catch (regErr) {
+        fbUpdateSyncStatus('error');
+        fbToast('Registration failed: ' + fbAuthErrorMsg(regErr), 'error');
+      }
+    } else if (loginErr.code === 'auth/wrong-password') {
+      fbUpdateSyncStatus('error');
+      fbToast('Incorrect password. Please try again.', 'error');
+    } else if (loginErr.code === 'auth/too-many-requests') {
+      fbUpdateSyncStatus('error');
+      fbToast('Too many attempts. Please try again later.', 'error');
+    } else {
+      fbUpdateSyncStatus('error');
+      fbToast('Sign-in failed: ' + fbAuthErrorMsg(loginErr), 'error');
+    }
+  }
+}
+
+/** Sign out */
+async function fbHandleLogout() {
+  if (!_fbAuth) return;
+  try {
+    await _fbAuth.signOut(_fbAuth.instance);
+    _fbUser = null;
+    fbRenderLoggedOut();
+    fbUpdateSyncStatus('idle');
+    fbToast('Signed out.', 'info');
+  } catch (err) {
+    fbToast('Sign-out failed: ' + err.message, 'error');
+  }
+}
+
+/** Manual "Backup Now" button */
+async function fbHandleManualBackup() {
+  if (!_fbUser) { fbToast('Please sign in first.', 'error'); return; }
+  if (!_fbOnline) { fbToast('You are offline.', 'error'); return; }
+  await fbSync();
+  fbToast('Backup complete ✓', 'success');
+}
+
+/** Manual "Restore" button */
+async function fbHandleManualRestore() {
+  if (!_fbUser) { fbToast('Please sign in first.', 'error'); return; }
+  if (!_fbOnline) { fbToast('You are offline.', 'error'); return; }
+
+  // Use existing confirmAction from the app IIFE
+  if (typeof confirmAction === 'function') {
+    confirmAction(
+      'Restore from Cloud?',
+      'Cloud data will be merged into your local data. Newer records win.',
+      async () => {
+        try {
+          fbUpdateSyncStatus('syncing');
+          await fbPerformRestore();
+          fbUpdateSyncStatus('synced');
+          fbToast('Cloud restore complete ✓', 'success', 3000);
+        } catch (err) {
+          fbUpdateSyncStatus('error');
+          fbToast('Restore failed: ' + err.message, 'error');
+        }
+      }
+    );
   } else {
-    el.innerHTML = '<span style="opacity:0.55;font-size:13px;">Not signed in</span>';
+    // Fallback if confirmAction not available yet
+    try {
+      fbUpdateSyncStatus('syncing');
+      await fbPerformRestore();
+      fbUpdateSyncStatus('synced');
+      fbToast('Cloud restore complete ✓', 'success', 3000);
+    } catch (err) {
+      fbUpdateSyncStatus('error');
+      fbToast('Restore failed: ' + err.message, 'error');
+    }
   }
 }
 
 /* =============================================================
-   [NEW] ── CLOUD BACKUP (write to Firestore)
+   CLOUD BACKUP (write to Firestore)
    Structure:
-     users/{uid}/meta/appData        — settings snapshot
-     users/{uid}/transactions/{id}   — individual tx documents
-     users/{uid}/categories/{id}     — individual category docs
+     users/{uid}/meta/appData            ← non-sensitive settings
+     users/{uid}/transactions/{id}       ← individual transactions
+     users/{uid}/categories/{id}         ← individual categories
+
+   NEVER uploaded: pinHash, recoveryHash, password, securityHash
    ============================================================= */
 
 /**
- * [NEW] Debounced trigger — call after any local data change.
+ * Debounced sync trigger — call after any local data change.
  * Prevents flooding Firestore on rapid successive edits.
  */
-function scheduleSyncToCloud() {
-  if (!_currentUser || !_firebaseFirestore) return;
-  if (_syncTimer) clearTimeout(_syncTimer);
-  _syncTimer = setTimeout(() => {
-    _syncTimer = null;
-    if (_isOnline) {
-      performCloudSync();
+function fbScheduleSync() {
+  if (!_fbUser || !_fbDb) return;
+  if (_fbSyncTimer) clearTimeout(_fbSyncTimer);
+  _fbSyncTimer = setTimeout(() => {
+    _fbSyncTimer = null;
+    if (_fbOnline) {
+      fbSync();
     } else {
-      // Queue for when online returns
-      _syncQueue.push('full');
-      updateSyncUI('offline');
+      _fbSyncQueue = true;
+      fbUpdateSyncStatus('offline');
     }
-  }, 1500); // 1.5 s debounce
+  }, 1800); // 1.8 s debounce — avoids rapid-fire writes
 }
 
 /**
- * [NEW] Flushes queued sync operations once back online.
+ * Performs the actual Firestore write using batched operations.
+ * Uses latest-wins strategy: every record carries an updatedAt timestamp.
+ * Non-blocking: errors are caught and logged; local data is never affected.
  */
-async function flushSyncQueue() {
-  if (!_syncQueue.length || !_currentUser) return;
-  _syncQueue = [];
-  await performCloudSync();
-}
-
-/**
- * [NEW] Performs the actual Firestore write.
- * Uses batched writes for atomicity.
- * Stamped with updatedAt so conflict resolution uses latest-wins.
- */
-async function performCloudSync() {
-  if (!_currentUser || !_firebaseFirestore || !_isOnline) return;
-  if (_syncPending) return; // already in flight
-  _syncPending = true;
-  updateSyncUI('syncing');
+async function fbSync() {
+  if (!_fbUser || !_fbDb || !_fbOnline) return;
+  if (_fbSyncing) return; // already in flight
+  _fbSyncing = true;
+  fbUpdateSyncStatus('syncing');
 
   try {
-    const fs   = _firebaseFirestore;
-    const db   = fs.instance;
-    const uid  = _currentUser.uid;
+    const db  = _fbDb.instance;
+    const uid = _fbUser.uid;
 
-    // ── 1. Save meta / settings (non-sensitive: no pinHash, no recoveryHash)
+    // ── 1. Save non-sensitive settings snapshot
     const safeMeta = {
-      theme:            state.settings.theme,
-      lastBackupPrompt: state.settings.lastBackupPrompt,
+      theme:            (typeof state !== 'undefined' && state.settings?.theme) || 'dark',
+      lastBackupPrompt: (typeof state !== 'undefined' && state.settings?.lastBackupPrompt) || 0,
       updatedAt:        Date.now()
     };
-    await fs.setDoc(
-      fs.doc(db, 'users', uid, 'meta', 'appData'),
+    await _fbDb.setDoc(
+      _fbDb.doc(db, 'users', uid, 'meta', 'appData'),
       safeMeta,
       { merge: true }
     );
 
-    // ── 2. Batch-write all transactions (Firestore batch max = 500)
-    const txBatches = chunkArray(state.transactions, 400);
-    for (const chunk of txBatches) {
-      const batch = fs.writeBatch(db);
+    // ── 2. Batch-write transactions (Firestore max batch = 500)
+    const txns = (typeof state !== 'undefined' && state.transactions) || [];
+    for (const chunk of fbChunk(txns, 400)) {
+      const batch = _fbDb.writeBatch(db);
       for (const tx of chunk) {
-        const ref = fs.doc(db, 'users', uid, 'transactions', tx.id);
+        const ref = _fbDb.doc(db, 'users', uid, 'transactions', tx.id);
         batch.set(ref, { ...tx, _syncedAt: Date.now() }, { merge: true });
       }
       await batch.commit();
     }
 
-    // ── 3. Batch-write all categories
-    const catBatches = chunkArray(state.categories, 400);
-    for (const chunk of catBatches) {
-      const batch = fs.writeBatch(db);
+    // ── 3. Batch-write categories
+    const cats = (typeof state !== 'undefined' && state.categories) || [];
+    for (const chunk of fbChunk(cats, 400)) {
+      const batch = _fbDb.writeBatch(db);
       for (const cat of chunk) {
-        const ref = fs.doc(db, 'users', uid, 'categories', cat.id);
+        const ref = _fbDb.doc(db, 'users', uid, 'categories', cat.id);
         batch.set(ref, { ...cat, _syncedAt: Date.now() }, { merge: true });
       }
       await batch.commit();
     }
 
-    updateSyncUI('synced');
+    fbUpdateSyncStatus('synced');
     console.log('[CoinLence] Cloud sync complete.');
   } catch (err) {
     console.error('[CoinLence] Cloud sync error:', err);
-    updateSyncUI('error');
-    toast('Cloud sync error — data is safe locally.', 'error', 3000);
+    fbUpdateSyncStatus('error');
+    fbToast('Cloud sync error — data is safe locally.', 'error', 3000);
   } finally {
-    _syncPending = false;
+    _fbSyncing = false;
   }
 }
 
-/**
- * [NEW] Helper: splits an array into chunks of `size`.
- */
-function chunkArray(arr, size) {
+/** Splits array into chunks of `size` */
+function fbChunk(arr, size) {
   const out = [];
   for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
   return out;
 }
 
 /* =============================================================
-   [NEW] ── CLOUD RESTORE (read from Firestore)
-   Called on first login or manual restore.
-   LOCAL DATA WINS if it is newer (updatedAt comparison).
+   CLOUD RESTORE (read from Firestore)
    ============================================================= */
 
 /**
- * [NEW] Restores from cloud ONLY if local has fewer transactions.
- * This protects existing local data on first cloud login.
+ * Called automatically on sign-in.
+ * Strategy:
+ *   - Cloud empty        → push local data up
+ *   - Local empty        → restore from cloud silently
+ *   - Cloud has more     → notify user to restore manually
+ *   - Local has equal/more → push local up
  */
-async function cloudRestoreIfEmpty() {
-  if (!_currentUser || !_firebaseFirestore) return;
-  const localCount = state.transactions.length;
-
+async function fbRestoreOrPush() {
+  if (!_fbUser || !_fbDb) return;
   try {
-    const cloudTxs = await fetchCloudTransactions();
+    const cloudTxs = await fbFetchCloudCollection('transactions');
     if (!cloudTxs.length) {
-      // Nothing in cloud yet — push local data up
-      await performCloudSync();
+      await fbSync();
       return;
     }
-
+    const localCount = (typeof state !== 'undefined' && state.transactions.length) || 0;
     if (localCount === 0) {
-      // Local is empty → restore from cloud automatically
-      await doCloudRestore(cloudTxs);
-      toast('Data restored from cloud ☁️', 'success', 3500);
+      await fbPerformRestore();
+      fbToast('Data restored from cloud ☁️', 'success', 3500);
     } else if (cloudTxs.length > localCount) {
-      // Cloud has more → offer merge prompt
-      toast('Cloud has more data. Use "Restore from Cloud" in Settings to sync.', 'info', 4000);
+      fbToast('Cloud has more data. Use "Restore" in Cloud Sync settings.', 'info', 4000);
     } else {
-      // Local has equal or more — push local up
-      await performCloudSync();
+      await fbSync();
     }
   } catch (err) {
     console.error('[CoinLence] Cloud restore check error:', err);
@@ -386,165 +625,133 @@ async function cloudRestoreIfEmpty() {
 }
 
 /**
- * [NEW] Fetches all transactions from Firestore for the current user.
+ * Fetches all documents from a user sub-collection.
  */
-async function fetchCloudTransactions() {
-  const fs    = _firebaseFirestore;
-  const uid   = _currentUser.uid;
-  const snap  = await fs.getDocs(fs.collection(fs.instance, 'users', uid, 'transactions'));
-  const txs   = [];
-  snap.forEach(d => txs.push(d.data()));
-  return txs;
+async function fbFetchCloudCollection(collName) {
+  const uid  = _fbUser.uid;
+  const snap = await _fbDb.getDocs(
+    _fbDb.collection(_fbDb.instance, 'users', uid, collName)
+  );
+  const docs = [];
+  snap.forEach(d => docs.push(d.data()));
+  return docs;
 }
 
 /**
- * [NEW] Fetches all categories from Firestore.
+ * Merges cloud data into local IndexedDB using latest-wins.
+ * ONLY updates records where the cloud version is newer (updatedAt).
  */
-async function fetchCloudCategories() {
-  const fs    = _firebaseFirestore;
-  const uid   = _currentUser.uid;
-  const snap  = await fs.getDocs(fs.collection(fs.instance, 'users', uid, 'categories'));
-  const cats  = [];
-  snap.forEach(d => cats.push(d.data()));
-  return cats;
-}
+async function fbPerformRestore() {
+  if (!_fbUser || !_fbDb) throw new Error('Not signed in.');
 
-/**
- * [NEW] Writes cloud data into local IndexedDB / localStorage.
- * Uses latest-wins conflict resolution via updatedAt.
- */
-async function doCloudRestore(cloudTxs) {
-  // Merge strategy: for each cloud tx, if local has it check updatedAt
-  const localMap = {};
-  state.transactions.forEach(t => { localMap[t.id] = t; });
-
+  // ── Restore transactions
+  const cloudTxs   = await fbFetchCloudCollection('transactions');
+  const localTxMap = {};
+  if (typeof state !== 'undefined') {
+    state.transactions.forEach(t => { localTxMap[t.id] = t; });
+  }
   for (const cloudTx of cloudTxs) {
     if (!cloudTx.id || !cloudTx.type || !cloudTx.date) continue; // skip malformed
-    const localTx = localMap[cloudTx.id];
+    const localTx = localTxMap[cloudTx.id];
     if (!localTx || (cloudTx.updatedAt || 0) > (localTx.updatedAt || 0)) {
-      await dbPut(STORES.TX, cloudTx);
+      if (typeof dbPut !== 'undefined' && typeof STORES !== 'undefined') {
+        await dbPut(STORES.TX, cloudTx);
+      }
     }
   }
 
-  const cloudCats = await fetchCloudCategories();
+  // ── Restore categories
+  const cloudCats   = await fbFetchCloudCollection('categories');
   const localCatMap = {};
-  state.categories.forEach(c => { localCatMap[c.id] = c; });
+  if (typeof state !== 'undefined') {
+    state.categories.forEach(c => { localCatMap[c.id] = c; });
+  }
   for (const cat of cloudCats) {
     if (!cat.id || !cat.name) continue;
-    if (!localCatMap[cat.id]) await dbPut(STORES.CATS, cat);
+    if (!localCatMap[cat.id]) {
+      if (typeof dbPut !== 'undefined' && typeof STORES !== 'undefined') {
+        await dbPut(STORES.CATS, cat);
+      }
+    }
   }
 
-  // Reload state from DB
-  await loadTransactions();
-  await loadCategories();
-  populateMonthYearFilters();
-  populateCategorySelect();
-  renderAll();
+  // ── Reload local state from DB and re-render
+  if (typeof loadTransactions === 'function') await loadTransactions();
+  if (typeof loadCategories   === 'function') await loadCategories();
+  if (typeof populateMonthYearFilters === 'function') populateMonthYearFilters();
+  if (typeof populateCategorySelect   === 'function') populateCategorySelect();
+  if (typeof renderAll                === 'function') renderAll();
+}
+
+/* =============================================================
+   MUTATION OBSERVER SYNC HOOK
+   Watches transaction lists in the DOM. Any childList mutation
+   means a write happened → schedule a background sync.
+   This is the safest way to hook into the existing IIFE without
+   modifying its internals.
+   ============================================================= */
+let _fbObserver = null;
+
+function fbHookMutationObserver() {
+  if (_fbObserver) return; // already hooked
+  const observer = new MutationObserver(() => fbScheduleSync());
+  _fbObserver = observer;
+
+  const recentList  = document.getElementById('recentList');
+  const historyList = document.getElementById('historyList');
+  if (recentList)  observer.observe(recentList,  { childList: true });
+  if (historyList) observer.observe(historyList, { childList: true });
+}
+
+/* =============================================================
+   UTILITIES
+   ============================================================= */
+
+/** Safe HTML escape for output inside innerHTML */
+function fbEscape(s) {
+  return String(s || '').replace(/[&<>"']/g, c => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+  }[c]));
+}
+
+/** Human-readable Firebase auth error messages */
+function fbAuthErrorMsg(err) {
+  const MAP = {
+    'auth/email-already-in-use':    'This email is already registered.',
+    'auth/invalid-email':           'Invalid email address.',
+    'auth/weak-password':           'Password is too weak (min 6 chars).',
+    'auth/user-not-found':          'No account found with this email.',
+    'auth/wrong-password':          'Incorrect password.',
+    'auth/too-many-requests':       'Too many attempts. Try again later.',
+    'auth/network-request-failed':  'Network error. Check your connection.',
+    'auth/popup-blocked':           'Popup was blocked. Allow popups and retry.',
+    'auth/cancelled-popup-request': 'Sign-in cancelled.'
+  };
+  return MAP[err.code] || err.message || 'Unknown error.';
 }
 
 /**
- * [NEW] Manual restore triggered from Settings.
- * Fetches latest cloud data and merges into local (latest-wins).
+ * Forward to the existing app toast() function if available,
+ * otherwise use a minimal fallback (should never be needed).
  */
-async function manualCloudRestore() {
-  if (!_currentUser) {
-    toast('Please sign in with Google first.', 'error');
-    return;
+function fbToast(msg, type = 'info', duration = 2500) {
+  if (typeof toast === 'function') {
+    toast(msg, type, duration);
+  } else {
+    console.log(`[CoinLence Toast] [${type}] ${msg}`);
   }
-  if (!_isOnline) {
-    toast('You are offline. Connect to internet and try again.', 'error');
-    return;
-  }
-  confirmAction(
-    'Restore from Cloud?',
-    'Cloud data will be merged into your local data. Newer records win.',
-    async () => {
-      try {
-        updateSyncUI('syncing');
-        const cloudTxs = await fetchCloudTransactions();
-        await doCloudRestore(cloudTxs);
-        updateSyncUI('synced');
-        toast('Cloud restore complete ✓', 'success', 3000);
-      } catch (err) {
-        updateSyncUI('error');
-        toast('Restore failed: ' + err.message, 'error');
-      }
-    }
-  );
 }
 
-/* =============================================================
-   [NEW] ── CLOUD SYNC CARD in Settings
-   Injects a new "Cloud Sync" card into the existing Settings view.
-   ============================================================= */
-function injectCloudSyncSettingsCard() {
-  const settingsView = document.getElementById('view-settings');
-  if (!settingsView) return;
-
-  // Insert before the "About" card (last card)
-  const cards    = settingsView.querySelectorAll('.card.settings-card');
-  const aboutCard = cards[cards.length - 1];
-
-  const card = document.createElement('div');
-  card.className = 'card settings-card';
-  card.innerHTML = `
-    <h4>☁️ Cloud Sync</h4>
-    <div id="cloudUserInfo" style="margin-bottom:12px;">
-      <span style="opacity:0.55;font-size:13px;">Not signed in</span>
-    </div>
-    <button class="btn btn-block" id="cloudLoginBtn">Sign in with Google</button>
-    <button class="btn btn-block" id="cloudRestoreBtn" style="margin-top:8px;">Restore from Cloud</button>
-    <button class="btn btn-block" id="cloudBackupNowBtn" style="margin-top:8px;">Backup Now</button>
-    <p style="font-size:11px;opacity:0.5;margin-top:10px;">
-      Data syncs automatically after every change when signed in and online.
-    </p>
-  `;
-
-  settingsView.insertBefore(card, aboutCard);
-
-  // Wire up buttons
-  document.getElementById('cloudLoginBtn').addEventListener('click', handleGoogleLogin);
-  document.getElementById('cloudRestoreBtn').addEventListener('click', manualCloudRestore);
-  document.getElementById('cloudBackupNowBtn').addEventListener('click', async () => {
-    if (!_currentUser) { toast('Sign in with Google first.', 'error'); return; }
-    await performCloudSync();
-    toast('Backup complete ✓', 'success');
-  });
-}
-
-/* =============================================================
-   [NEW] ── PATCH: Hook sync into existing data-mutation functions
-   We wrap the existing functions at the module level so their
-   internal logic stays 100% untouched; we just fire scheduleSyncToCloud()
-   after each successful operation.
-   ============================================================= */
-
-// These patches run AFTER the original functions execute.
-// They are applied inside init() after the original code defines the functions.
-function patchDataFunctionsForSync() {
-  const _origAddTx    = window.__coinlence_addTx    || null;
-  const _origUpdateTx = window.__coinlence_updateTx || null;
-  const _origDeleteTx = window.__coinlence_deleteTx || null;
-  // We don't patch via window (IIFE scope prevents that).
-  // Instead, we use MutationObserver on the transaction lists as a
-  // side-channel trigger — any DOM change in tx lists means a write happened.
-  // This is safe and decoupled: if sync fails, local data is intact.
-  const observer = new MutationObserver(() => scheduleSyncToCloud());
-  const recentList  = document.getElementById('recentList');
-  const historyList = document.getElementById('historyList');
-  if (recentList)  observer.observe(recentList,  { childList: true, subtree: false });
-  if (historyList) observer.observe(historyList, { childList: true, subtree: false });
-}
 
 /* =============================================================
    ────────────────────────────────────────────────────────────
-   ██████╗ ██████╗ ██╗ ██████╗ ██╗███╗   ██╗ █████╗ ██╗
-   ██╔═══██╗██╔══██╗██║██╔════╝ ██║████╗  ██║██╔══██╗██║
-   ██║   ██║██████╔╝██║██║  ███╗██║██╔██╗ ██║███████║██║
-   ██║   ██║██╔══██╗██║██║   ██║██║██║╚██╗██║██╔══██║██║
-   ╚██████╔╝██║  ██║██║╚██████╔╝██║██║ ╚████║██║  ██║███████╗
-    ╚═════╝ ╚═╝  ╚═╝╚═╝ ╚═════╝ ╚═╝╚═╝  ╚═══╝╚═╝  ╚═╝╚══════╝
-   ORIGINAL CODE BELOW — ZERO MODIFICATIONS
+   ██████╗  █████╗ ██████╗ ████████╗    ██████╗
+   ██╔══██╗██╔══██╗██╔══██╗╚══██╔══╝    ╚════██╗
+   ██████╔╝███████║██████╔╝   ██║         ███╔╝
+   ██╔═══╝ ██╔══██║██╔══██╗   ██║         ╚══╝
+   ██║     ██║  ██║██║  ██║   ██║        ██╗
+   ╚═╝     ╚═╝  ╚═╝╚═╝  ╚═╝   ╚═╝        ╚═╝
+   ORIGINAL APP CODE — ZERO MODIFICATIONS
    ────────────────────────────────────────────────────────────
    ============================================================= */
 
@@ -1969,14 +2176,11 @@ async function init() {
 
     applyTheme(state.settings.theme);
 
-    // [NEW] Inject cloud UI elements (non-blocking)
-    injectCloudSyncSettingsCard();
+    // Inject Cloud Sync card into Settings (non-blocking, no Firebase needed yet)
+    fbInjectSettingsCard();
 
-    // [NEW] Load Firebase in background — does NOT block app startup
-    loadFirebase().then(() => {
-      // After Firebase loads, hook MutationObserver to trigger sync
-      patchDataFunctionsForSync();
-    }).catch(() => {
+    // Load Firebase in background — does NOT block app startup or offline use
+    fbLoad().catch(() => {
       // Silently fail — app works offline
     });
 
@@ -2002,10 +2206,10 @@ document.addEventListener('DOMContentLoaded', init);
 })();
 
 /* =============================================================
-   [NEW] ── FIRESTORE SECURITY RULES
+   FIRESTORE SECURITY RULES
    ─────────────────────────────────────────────────────────────
-   Copy these rules into Firebase Console →
-   Firestore Database → Rules tab.
+   Copy these rules into:
+   Firebase Console → Firestore Database → Rules tab
    ─────────────────────────────────────────────────────────────
 
 rules_version = '2';
@@ -2018,7 +2222,7 @@ service cloud.firestore {
                          && request.auth.uid == userId;
     }
 
-    // Deny everything else
+    // Deny everything else by default
     match /{document=**} {
       allow read, write: if false;
     }
@@ -2026,11 +2230,12 @@ service cloud.firestore {
 }
 
    ─────────────────────────────────────────────────────────────
-   SETUP CHECKLIST:
-   ✅ 1. Replace FIREBASE_CONFIG values at top of this file
-   ✅ 2. Enable Google Sign-In in Firebase Console → Authentication
-   ✅ 3. Add your domain to Firebase Console →
-          Authentication → Settings → Authorized domains
-   ✅ 4. Apply the Firestore Security Rules above
+   SETUP CHECKLIST (quick reference):
+   ✅ 1. Replace FIREBASE_CONFIG values at the top of this file
+   ✅ 2. Firebase Console → Authentication → Sign-in method:
+          Enable: Google AND Email/Password
+   ✅ 3. Firebase Console → Authentication → Settings →
+          Authorized domains: add your deployed domain
+   ✅ 4. Paste the Firestore Security Rules above into the Rules tab
    ✅ 5. Deploy and test
    ============================================================= */
