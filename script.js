@@ -1248,17 +1248,25 @@ function b64Decode(str) {
 
 /* Simple hash (SHA-256 via SubtleCrypto) */
 async function sha256(text) {
-  if (window.crypto && crypto.subtle) {
-    const enc = new TextEncoder().encode(text);
-    const buf = await crypto.subtle.digest('SHA-256', enc);
-    return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2,'0')).join('');
+  // 1. Best case: modern browser crypto API
+  if (window.crypto?.subtle) {
+    const encoded = new TextEncoder().encode(text);
+    const hashBuffer = await crypto.subtle.digest('SHA-256', encoded);
+
+    return Array.from(new Uint8Array(hashBuffer))
+      .map(b => b.toString(16).padStart(2, '0'))
+      .join('');
   }
-  // Fallback (lightweight; not cryptographic)
+
+  // 2. Fallback (fast non-crypto hash)
   let h = 0;
-  for (let i=0; i<text.length; i++) {
- h = (Math.imul(31, h) + text.charCodeAt(i)) | 0;
-}
-  return 'fb_' + (h>0).toString(16);
+
+  for (let i = 0; i < text.length; i++) {
+    h = (Math.imul(31, h) + text.charCodeAt(i)) | 0;
+  }
+
+  // normalize to unsigned + stable hex output
+  return `fb_${(h >>> 0).toString(16).padStart(8, '0')}`;
 }
 
 /* ===========================================================
