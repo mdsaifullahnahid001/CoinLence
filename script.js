@@ -1256,8 +1256,8 @@ async function sha256(text) {
   // Fallback (lightweight; not cryptographic)
   let h = 0;
   for (let i=0; i<text.length; i++) {
-  h = (Math.imul(31, h) + text.charCodeAt(i)) 0;
-  }
+ h = (Math.imul(31, h) + text.charCodeAt(i)) | 0;
+}
   return 'fb_' + (h>0).toString(16);
 }
 
