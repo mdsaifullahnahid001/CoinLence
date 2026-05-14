@@ -518,8 +518,9 @@ textarea { resize: vertical; }
   display: none;
 }
 /* ================================================
-   FIREBASE SYNC & AUTH — NEW ADDITIONS ONLY
-   All existing styles above are untouched.
+   FIREBASE SYNC & AUTH STYLES
+   Replaces old Firebase CSS block entirely.
+   All existing app styles above are untouched.
    ================================================ */
 
 /* ===== Sync Status Indicator ===== */
@@ -534,7 +535,7 @@ textarea { resize: vertical; }
   border: 1px solid var(--border);
   background: var(--bg-elev-2);
   color: var(--muted);
-  transition: all 0.3s ease;
+  transition: color 0.3s ease, border-color 0.3s ease, background 0.3s ease;
   user-select: none;
   white-space: nowrap;
 }
@@ -547,64 +548,111 @@ textarea { resize: vertical; }
   transition: background 0.3s ease;
 }
 
+/* Idle / default */
+.sync-status[data-state="idle"] { color: var(--muted); }
+.sync-status[data-state="idle"]::before { background: var(--muted); }
+
 /* Synced */
-.sync-status[data-state="synced"] { color: var(--success); border-color: rgba(46,204,113,0.25); background: rgba(46,204,113,0.07); }
+.sync-status[data-state="synced"] {
+  color: var(--success);
+  border-color: rgba(46,204,113,0.25);
+  background: rgba(46,204,113,0.07);
+}
 .sync-status[data-state="synced"]::before { background: var(--success); }
 
-/* Syncing — spinning dot */
-.sync-status[data-state="syncing"] { color: var(--primary); border-color: rgba(91,140,255,0.25); background: rgba(91,140,255,0.07); }
+/* Syncing — pulsing dot */
+.sync-status[data-state="syncing"] {
+  color: var(--primary);
+  border-color: rgba(91,140,255,0.25);
+  background: rgba(91,140,255,0.07);
+}
 .sync-status[data-state="syncing"]::before {
   background: var(--primary);
   animation: syncPulse 0.9s ease infinite;
 }
 
 /* Offline */
-.sync-status[data-state="offline"] { color: var(--warning); border-color: rgba(255,181,71,0.25); background: rgba(255,181,71,0.07); }
+.sync-status[data-state="offline"] {
+  color: var(--warning);
+  border-color: rgba(255,181,71,0.25);
+  background: rgba(255,181,71,0.07);
+}
 .sync-status[data-state="offline"]::before { background: var(--warning); }
 
 /* Error */
-.sync-status[data-state="error"] { color: var(--danger); border-color: rgba(255,92,92,0.25); background: rgba(255,92,92,0.07); }
+.sync-status[data-state="error"] {
+  color: var(--danger);
+  border-color: rgba(255,92,92,0.25);
+  background: rgba(255,92,92,0.07);
+}
 .sync-status[data-state="error"]::before { background: var(--danger); }
 
 @keyframes syncPulse {
   0%, 100% { transform: scale(1); opacity: 1; }
-  50% { transform: scale(1.5); opacity: 0.5; }
+  50% { transform: scale(1.6); opacity: 0.45; }
 }
 
-/* ===== Google Sign-In Button ===== */
-.btn-google {
+/* ===== Cloud Auth Form (shown inside Cloud Sync card when logged out) ===== */
+.cloud-auth-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* Email/password inputs inside the cloud sync card */
+.cloud-auth-section .form-group {
+  margin-bottom: 0;
+}
+.cloud-auth-section input {
+  background: var(--bg-elev-2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 11px 13px;
+  border-radius: 11px;
+  font-size: 0.93rem;
+  font-family: inherit;
+  outline: none;
+  width: 100%;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+.cloud-auth-section input:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(91,140,255,0.16);
+}
+.cloud-auth-section input::placeholder {
+  color: var(--muted);
+  opacity: 0.75;
+}
+
+/* Auth error message inside cloud card */
+.cloud-auth-error {
+  font-size: 0.8rem;
+  color: var(--danger);
+  min-height: 1em;
+  margin: -2px 0 2px;
+  line-height: 1.4;
+}
+
+/* Login/Register button inside cloud card */
+.cloud-auth-section .btn-primary {
+  width: 100%;
+  padding: 11px 14px;
+  font-size: 0.93rem;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 10px;
-  width: 100%;
-  padding: 12px 18px;
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  background: var(--bg-elev-2);
-  color: var(--text);
-  font-size: 0.95rem;
-  font-weight: 600;
-  cursor: pointer;
-  font-family: inherit;
-  transition: background 0.2s ease, box-shadow 0.2s ease, transform 0.15s ease;
-  margin-top: 10px;
+  gap: 7px;
+  margin-top: 2px;
 }
-.btn-google:hover {
-  background: var(--bg-elev);
-  box-shadow: 0 4px 16px rgba(0,0,0,0.18);
-}
-.btn-google:active { transform: scale(0.97); }
-.btn-google svg { width: 20px; height: 20px; flex-shrink: 0; }
 
-/* Divider between PIN login and Google login */
+/* ===== Auth Divider ("or" separator) ===== */
 .auth-divider {
   display: flex;
   align-items: center;
   gap: 10px;
-  margin: 14px 0 4px;
   color: var(--muted);
-  font-size: 0.8rem;
+  font-size: 0.78rem;
+  margin: 2px 0;
 }
 .auth-divider::before,
 .auth-divider::after {
@@ -614,7 +662,135 @@ textarea { resize: vertical; }
   background: var(--border);
 }
 
-/* ===== User Avatar in Header ===== */
+/* ===== Google Sign-In Button ===== */
+.btn-google {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  padding: 11px 14px;
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  background: var(--bg-elev-2);
+  color: var(--text);
+  font-size: 0.93rem;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.2s ease, box-shadow 0.2s ease, transform 0.15s ease;
+}
+.btn-google:hover {
+  background: var(--bg-elev);
+  box-shadow: 0 4px 14px rgba(0,0,0,0.15);
+}
+.btn-google:active { transform: scale(0.97); }
+.btn-google svg {
+  width: 19px; height: 19px;
+  flex-shrink: 0;
+}
+
+/* ===== Cloud Sync — Logged-In Panel ===== */
+.cloud-user-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* User info row at top of logged-in panel */
+.cloud-user-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border);
+}
+.cloud-user-avatar {
+  width: 38px; height: 38px;
+  border-radius: 50%;
+  background: var(--gradient);
+  color: #fff;
+  font-size: 0.9rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  overflow: hidden;
+  border: 2px solid rgba(255,255,255,0.18);
+}
+.cloud-user-avatar img {
+  width: 100%; height: 100%;
+  object-fit: cover;
+  border-radius: 50%;
+}
+.cloud-user-info { flex: 1; min-width: 0; }
+.cloud-user-name {
+  font-weight: 700;
+  font-size: 0.88rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--text);
+}
+.cloud-user-email {
+  font-size: 0.75rem;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-top: 1px;
+}
+
+/* Sync info row — "Last synced: ..." */
+.sync-info-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 0;
+  font-size: 0.85rem;
+  color: var(--text);
+}
+.sync-info-row .sync-timestamp {
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+/* Sync status indicator row */
+.sync-status-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 0;
+}
+
+/* Action buttons inside cloud sync card */
+.sync-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 2px;
+}
+.sync-actions .btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 0;
+  padding: 10px 14px;
+  font-size: 0.88rem;
+  width: 100%;
+}
+.sync-actions .btn-danger {
+  background: rgba(255,92,92,0.1);
+  color: var(--danger);
+  border: 1px solid rgba(255,92,92,0.22);
+}
+.sync-actions .btn-danger:hover {
+  background: rgba(255,92,92,0.18);
+}
+
+/* ===== User Avatar in App Header ===== */
 .user-avatar {
   width: 34px; height: 34px;
   border-radius: 50%;
@@ -629,19 +805,19 @@ textarea { resize: vertical; }
   transform: scale(1.05);
 }
 
-/* Fallback avatar (initials circle) */
+/* Fallback initials avatar in header */
 .user-avatar-fallback {
   width: 34px; height: 34px;
   border-radius: 50%;
   background: var(--gradient);
   color: #fff;
-  font-size: 0.85rem;
+  font-size: 0.82rem;
   font-weight: 700;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  border: 2px solid rgba(255,255,255,0.25);
+  border: 2px solid rgba(255,255,255,0.2);
   flex-shrink: 0;
   transition: box-shadow 0.2s ease, transform 0.15s ease;
   user-select: none;
@@ -651,7 +827,7 @@ textarea { resize: vertical; }
   transform: scale(1.05);
 }
 
-/* ===== User Profile Dropdown ===== */
+/* ===== User Profile Dropdown (from header avatar) ===== */
 .user-dropdown {
   position: absolute;
   top: 58px;
@@ -687,6 +863,7 @@ textarea { resize: vertical; }
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  margin-top: 1px;
 }
 .user-dropdown .btn {
   display: flex;
@@ -701,35 +878,13 @@ textarea { resize: vertical; }
   border-radius: 10px;
 }
 .user-dropdown .btn:last-child { margin-bottom: 0; }
-.user-dropdown .btn-danger { background: rgba(255,92,92,0.12); color: var(--danger); border: 1px solid rgba(255,92,92,0.2); }
-
-/* ===== Cloud Sync Settings Card ===== */
-.sync-info-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 8px 0;
-  font-size: 0.88rem;
-}
-.sync-info-row span:last-child {
-  color: var(--muted);
-  font-size: 0.82rem;
-}
-.sync-actions {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin-top: 10px;
-}
-.sync-actions .btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  margin-top: 0;
+.user-dropdown .btn-danger {
+  background: rgba(255,92,92,0.1);
+  color: var(--danger);
+  border: 1px solid rgba(255,92,92,0.2);
 }
 
-/* ===== Login Prompt Banner (shown when logged out) ===== */
+/* ===== Login Prompt Banner (shown in views when user is logged out) ===== */
 .cloud-login-banner {
   display: flex;
   align-items: center;
@@ -743,7 +898,11 @@ textarea { resize: vertical; }
   font-size: 0.85rem;
   animation: fadeIn 0.3s ease;
 }
-.cloud-login-banner p { color: var(--muted); margin: 0; line-height: 1.4; }
+.cloud-login-banner p {
+  color: var(--muted);
+  margin: 0;
+  line-height: 1.4;
+}
 .cloud-login-banner p strong { color: var(--text); }
 .cloud-login-banner .btn {
   flex-shrink: 0;
@@ -770,13 +929,13 @@ textarea { resize: vertical; }
   animation: fadeIn 0.2s ease;
 }
 
-/* ===== Conflict Resolution Toast (extra wide) ===== */
+/* ===== Conflict toast variant ===== */
 .toast.conflict {
   border-left: 4px solid var(--borrow);
   max-width: 96%;
 }
 
-/* ===== Restore confirmation overlay ===== */
+/* ===== Restore Confirmation Overlay ===== */
 .restore-overlay {
   position: fixed; inset: 0; z-index: 1500;
   background: rgba(0,0,0,0.65);
@@ -797,6 +956,25 @@ textarea { resize: vertical; }
 }
 .restore-card .auth-logo { margin-bottom: 14px; }
 .restore-card h3 { margin-bottom: 8px; }
-.restore-card p { color: var(--muted); font-size: 0.88rem; margin-bottom: 18px; line-height: 1.5; }
+.restore-card p {
+  color: var(--muted);
+  font-size: 0.88rem;
+  margin-bottom: 18px;
+  line-height: 1.5;
+}
 .restore-card .row-flex { justify-content: center; gap: 12px; }
 .restore-card .btn { min-width: 110px; margin-top: 0; }
+
+/* ===== Responsive adjustments for Firebase UI ===== */
+@media (max-width: 380px) {
+  .cloud-auth-section input {
+    font-size: 0.88rem;
+    padding: 10px 11px;
+  }
+  .btn-google {
+    font-size: 0.88rem;
+    padding: 10px 12px;
+  }
+  .cloud-user-name { font-size: 0.84rem; }
+  .sync-actions .btn { font-size: 0.84rem; padding: 9px 12px; }
+}
