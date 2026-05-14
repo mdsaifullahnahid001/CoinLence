@@ -68,7 +68,7 @@
       "type": "image/png",
       "form_factor": "narrow",
       "label": "Settings & Security"
-    } 
+    },
     {
       "src": "assets/icon/ss2-copy.png", 
       "sizes": "1920x1080",
