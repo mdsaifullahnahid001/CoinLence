@@ -28,7 +28,6 @@ import {
    FIREBASE CONFIGURATION
    ============================================================= */
   // Import the functions you need from the SDKs you need
-  import { initializeApp } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-app.js";
   import { getAnalytics } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-analytics.js";
   // TODO: Add SDKs for Firebase products that you want to use
   // https://firebase.google.com/docs/web/setup#available-libraries
@@ -51,8 +50,6 @@ import {
 /* =============================================================
    INITIALIZE FIREBASE
    ============================================================= */
-
-const app = initializeApp(firebaseConfig);
 
 const auth = getAuth(app);
 
@@ -732,8 +729,8 @@ function fbRenderLoggedIn(user) {
   if (userInfo) {
     const name = fbEscape(user.displayName || 'User');
     const email = fbEscape(user.email || '');
-    const avatar = user.photoURL
-      ? `<img src="${user.photoURL}" alt="avatar" class="fb-avatar">`
+    const avatar = user.photoURL ?
+      `<img src="${user.photoURL}" alt="avatar" class="fb-avatar">`
       : `<span class="fb-avatar-placeholder">👤</span>`;
     userInfo.innerHTML = `
       <div class="fb-user-row">
@@ -1259,9 +1256,9 @@ async function sha256(text) {
   // Fallback (lightweight; not cryptographic)
   let h = 0;
   for (let i=0; i<text.length; i++) {
-    h = (Math.imul(31,h) + text.charCodeAt(i)) | 0;
+  h = (Math.imul(31, h) + text.charCodeAt(i)) 0;
   }
-  return 'fb_' + (h>>>0).toString(16);
+  return 'fb_' + (h>0).toString(16);
 }
 
 /* ===========================================================
