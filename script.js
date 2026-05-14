@@ -436,75 +436,262 @@ function fbUpdateSyncStatus(status) {
    Injected once into the existing Settings view.
    Shows auth form when logged out, user info + controls when in.
    ============================================================= */
+
 function fbInjectSettingsCard() {
+
   const settingsView = document.getElementById('view-settings');
+
   if (!settingsView || document.getElementById('fbCloudSyncCard')) return;
 
-  // Insert before the last card (About)
-  const cards     = settingsView.querySelectorAll('.card.settings-card');
+  // Insert before the last settings card
+
+  const cards = settingsView.querySelectorAll('.card.settings-card');
+
   const aboutCard = cards[cards.length - 1];
 
   const card = document.createElement('div');
+
   card.className = 'card settings-card';
+
   card.id = 'fbCloudSyncCard';
 
   card.innerHTML = `
+
     <h4>☁️ Cloud Sync</h4>
 
     <!-- ── LOGGED-OUT STATE ── -->
+
     <div id="fbAuthPanel">
-      <p class="fb-hint">Sign in to back up your data across devices.</p>
+
+      <p class="fb-hint">
+        Sign in to back up your data across devices.
+      </p>
 
       <div class="fb-field-group">
-        <input id="fbEmail"    type="email"    class="fb-input" placeholder="Email address" autocomplete="email" />
-        <input id="fbPassword" type="password" class="fb-input" placeholder="Password (min 6 chars)" autocomplete="current-password" />
-        <button class="btn btn-block" id="fbEmailAuthBtn">Login / Register</button>
+
+        <input
+          id="fbEmail"
+          type="email"
+          class="fb-input"
+          placeholder="Email address"
+          autocomplete="email"
+        />
+
+        <input
+          id="fbPassword"
+          type="password"
+          class="fb-input"
+          placeholder="Password (min 6 chars)"
+          autocomplete="current-password"
+        />
+
+        <button
+          class="btn btn-block"
+          id="fbEmailAuthBtn"
+        >
+          Login / Register
+        </button>
+
       </div>
 
-      <div class="fb-divider"><span>or</span></div>
+      <div class="fb-divider">
+        <span>or</span>
+      </div>
 
-      <button class="btn btn-block fb-google-btn" id="fbGoogleBtn">
-        <svg width="18" height="18" viewBox="0 0 48 48" style="vertical-align:middle;margin-right:8px;">
+      <button
+        class="btn btn-block fb-google-btn"
+        id="fbGoogleBtn"
+      >
+
+        <svg
+          width="18"
+          height="18"
+          viewBox="0 0 48 48"
+          style="vertical-align:middle;margin-right:8px;"
+        >
           <path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9.1 3.2l6.8-6.8C35.9 2.4 30.3 0 24 0 14.8 0 6.9 5.5 3.2 13.5l7.9 6.1C13 13.7 18.1 9.5 24 9.5z"/>
           <path fill="#4285F4" d="M46.5 24.5c0-1.6-.1-3.2-.4-4.7H24v9h12.7c-.6 3-2.3 5.5-4.8 7.2l7.5 5.8c4.4-4.1 7.1-10.1 7.1-17.3z"/>
           <path fill="#FBBC05" d="M11.1 28.6A14.5 14.5 0 0 1 9.5 24c0-1.6.3-3.1.8-4.5L2.4 13.5A23.9 23.9 0 0 0 0 24c0 3.8.9 7.4 2.4 10.6l8.7-6z"/>
           <path fill="#34A853" d="M24 48c6.3 0 11.7-2.1 15.6-5.7l-7.5-5.8c-2.1 1.4-4.8 2.2-8.1 2.2-6 0-11-4-12.9-9.4l-8.7 6C6.9 42.5 14.8 48 24 48z"/>
         </svg>
+
         Continue with Google
+
       </button>
+
     </div>
 
     <!-- ── LOGGED-IN STATE ── -->
+
     <div id="fbUserPanel" style="display:none;">
+
       <div id="fbUserInfo" class="fb-user-info"></div>
+
       <div id="fbSyncStatusText" class="fb-status-text"></div>
-      <p id="fbLastSyncText" class="fb-hint" style="margin-top:4px;"></p>
+
+      <p
+        id="fbLastSyncText"
+        class="fb-hint"
+        style="margin-top:4px;"
+      ></p>
+
       <div class="fb-btn-row">
-        <button class="btn" id="fbBackupNowBtn">⬆ Backup Now</button>
-        <button class="btn" id="fbRestoreBtn">⬇ Restore</button>
+
+        <button
+          class="btn"
+          id="fbBackupNowBtn"
+        >
+          ⬆ Backup Now
+        </button>
+
+        <button
+          class="btn"
+          id="fbRestoreBtn"
+        >
+          ⬇ Restore
+        </button>
+
       </div>
-      <button class="btn btn-block fb-logout-btn" id="fbLogoutBtn" style="margin-top:8px;">Sign Out</button>
+
+      <button
+        class="btn btn-block fb-logout-btn"
+        id="fbLogoutBtn"
+        style="margin-top:8px;"
+      >
+        Sign Out
+      </button>
+
     </div>
 
     <p class="fb-hint" style="margin-top:12px;">
-      Data syncs automatically after changes. PIN &amp; recovery key are never uploaded.
+      Data syncs automatically after changes.
+      PIN &amp; recovery key are never uploaded.
     </p>
+
   `;
 
   settingsView.insertBefore(card, aboutCard);
 
-  // ── Wire up events (once, no duplicates)
-  document.getElementById('fbGoogleBtn').addEventListener('click',    fbHandleGoogleLogin);
-  document.getElementById('fbEmailAuthBtn').addEventListener('click', fbHandleEmailAuth);
-  document.getElementById('fbLogoutBtn').addEventListener('click',    fbHandleLogout);
-  document.getElementById('fbBackupNowBtn').addEventListener('click', fbHandleManualBackup);
-  document.getElementById('fbRestoreBtn').addEventListener('click',   fbHandleManualRestore);
+  /* =============================================================
+     FIREBASE BUTTON EVENTS
+     ============================================================= */
 
-  // ── Inject sync badge into header (once)
-  const header = document.querySelector('.header-actions');
-  if (header && !document.getElementById('fbSyncBadge')) {
+  document.getElementById('fbGoogleBtn')
+    ?.addEventListener('click', async () => {
+
+      await loginWithGoogle();
+
+    });
+
+  document.getElementById('fbLogoutBtn')
+    ?.addEventListener('click', async () => {
+
+      await logoutUser();
+
+    });
+
+  document.getElementById('fbBackupNowBtn')
+    ?.addEventListener('click', async () => {
+
+      try {
+
+        await syncBalanceToCloud(balance);
+
+        const fbSyncStatusText =
+          document.getElementById('fbSyncStatusText');
+
+        const fbLastSyncText =
+          document.getElementById('fbLastSyncText');
+
+        if (fbSyncStatusText) {
+
+          fbSyncStatusText.textContent =
+            '✅ Backup completed';
+
+        }
+
+        if (fbLastSyncText) {
+
+          fbLastSyncText.textContent =
+            'Last backup: ' + new Date().toLocaleString();
+
+        }
+
+        console.log('Manual backup completed');
+
+      } catch (error) {
+
+        console.error('Backup Error:', error);
+
+      }
+
+    });
+
+  document.getElementById('fbRestoreBtn')
+    ?.addEventListener('click', async () => {
+
+      try {
+
+        const cloudData =
+          await loadUserCloudData();
+
+        if (
+          cloudData?.finance?.balance !== undefined
+        ) {
+
+          balance = cloudData.finance.balance;
+
+          updateUI();
+
+          const fbSyncStatusText =
+            document.getElementById('fbSyncStatusText');
+
+          const fbLastSyncText =
+            document.getElementById('fbLastSyncText');
+
+          if (fbSyncStatusText) {
+
+            fbSyncStatusText.textContent =
+              '✅ Restore completed';
+
+          }
+
+          if (fbLastSyncText) {
+
+            fbLastSyncText.textContent =
+              'Last restore: ' +
+              new Date().toLocaleString();
+
+          }
+
+          console.log('Cloud restore completed');
+
+        }
+
+      } catch (error) {
+
+        console.error('Restore Error:', error);
+
+      }
+
+    });
+
+  /* =============================================================
+     SYNC BADGE
+     ============================================================= */
+
+  const header =
+    document.querySelector('.header-actions');
+
+  if (
+    header &&
+    !document.getElementById('fbSyncBadge')
+  ) {
+
     const badge = document.createElement('span');
+
     badge.id = 'fbSyncBadge';
+
     badge.style.cssText = `
       font-size: 11px;
       padding: 2px 8px;
@@ -516,10 +703,18 @@ function fbInjectSettingsCard() {
       user-select: none;
       align-self: center;
     `;
-    header.insertBefore(badge, header.firstChild);
+
+    badge.textContent = '☁️ Sync';
+
+    header.insertBefore(
+      badge,
+      header.firstChild
+    );
+
   }
 
   fbUpdateSyncStatus('idle');
+
 }
 
 /* =============================================================
