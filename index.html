@@ -944,9 +944,22 @@ async function doSyncToFirebase() {
       deviceUA     : navigator.userAgent.slice(0, 120)
     };
 
-    // 4. Send to Firebase
-    const userDocRef = doc(db, 'users', currentUser.uid, 'data', 'app_state');
-    await setDoc(userDocRef, payload);
+  // 4. Send to Firebase
+const userDocRef = doc(db, 'users', currentUser.uid, 'data', 'app_state');
+
+// Adding identifiable info for Firebase Console
+payload.userEmail = currentUser.email;
+payload.lastSync = new Date().toLocaleString();
+
+// Extracting a summary for readable view
+if (payload.categories && Array.isArray(payload.categories)) {
+    payload.readableSummary = payload.categories.map(cat => ({
+        name: cat.name || "Unnamed",
+        amount: cat.amount || 0
+    }));
+}
+
+await setDoc(userDocRef, payload);
 
     setSyncStatus('synced');
     console.log('[CoinLence] Sync Successful');
