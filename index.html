@@ -947,56 +947,50 @@ async function doSyncToFirebase() {
   // 4. Send to Firebase
 const userDocRef = doc(db, 'users', currentUser.uid, 'data', 'app_state');
 
-// Adding identifiable info for Firebase Console
+// Metadata with verified local time
 payload.userEmail = currentUser.email;
-payload.lastSync = new Date().toLocaleString();
+payload.lastSync = new Date().toLocaleString('en-US', { hour12: true });
 
-// 1. Categories: Decoding and formatting
+// 1. Categories Decoding Logic
 if (payload.categories && Array.isArray(payload.categories)) {
     payload.readableCategories = payload.categories.map(cat => {
         try {
             let decoded = cat._b64 ? JSON.parse(decodeURIComponent(escape(atob(cat._b64)))) : {};
-            return {
-                name: decoded.name || cat.id || "Unnamed Category"
-            };
+            return { name: decoded.name || cat.id || "Unnamed Category" };
         } catch (e) {
             return { name: cat.id || "Unknown" };
         }
     });
 }
 
-// 2. Transactions: Precise Date and Local Time Fix (AM/PM)
+// 2. Transactions Decoding - Direct System Time Sync
 if (payload.transactions && Array.isArray(payload.transactions)) {
     payload.readableTransactions = payload.transactions.map(tx => {
         try {
             let decoded = tx._b64 ? JSON.parse(decodeURIComponent(escape(atob(tx._b64)))) : {};
             
-            // Get raw timestamp from data
-            let rawTimestamp = decoded.date || tx.date;
-            let transactionDate = rawTimestamp ? new Date(rawTimestamp) : new Date();
+            // Getting the current precise time from your device
+            let now = new Date();
+            let currentTimeStr = now.toLocaleString('en-US', {
+                year: 'numeric',
+                month: 'numeric',
+                day: 'numeric',
+                hour: 'numeric',
+                minute: 'numeric',
+                second: 'numeric',
+                hour12: true
+            });
 
             return {
                 title: decoded.title || tx.title || "No Title",
                 amount: Number(decoded.amount || tx.amount) || 0,
                 category: decoded.category || tx.category || "General",
                 type: decoded.type || tx.type || "Expense",
-                // This captures your exact local time with AM/PM
-                transactionTime: transactionDate.toLocaleString('en-US', { 
-                    hour: 'numeric', 
-                    minute: 'numeric', 
-                    second: 'numeric', 
-                    hour12: true, 
-                    year: 'numeric', 
-                    month: 'numeric', 
-                    day: 'numeric' 
-                })
+                // This will force the current system time (e.g., 6:13 PM)
+                transactionTime: currentTimeStr
             };
         } catch (e) {
-            return { 
-                title: "Decoding Error", 
-                amount: 0, 
-                syncAt: new Date().toLocaleString() 
-            };
+            return { title: "Decoding Error", amount: 0, syncTime: new Date().toLocaleString() };
         }
     });
 }
