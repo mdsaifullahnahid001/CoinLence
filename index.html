@@ -913,52 +913,59 @@
   /* =================================================================
      SECTION E — FIRESTORE SYNC  (upload local → cloud)
      ================================================================= */
-  async function doSyncToFirebase() {
-    if (!currentUser || !db) return;
-    if (isSyncing) { pendingSync = true; return; }
+ async function doSyncToFirebase() {
+  if (!currentUser || !db) return;
+  if (isSyncing) { pendingSync = true; return; }
 
-    isSyncing = true;
-    setSyncStatus('syncing');
+  isSyncing = true;
+  setSyncStatus('syncing');
 
-    try {
-      var { doc, setDoc } = await import(FB_BASE + 'firebase-firestore.js');
+  try {
+    var { doc, setDoc } = await import(FB_BASE + 'firebase-firestore.js');
 
-      var data = await readAllFromIdb();
-      if (!data) throw new Error('Could not read IndexedDB data');
+    var data = await readAllFromIdb();
+    if (!data) throw new Error('Could not read IndexedDB data');
 
-      var payload = {
-        transactions : data.transactions,
-        categories   : data.categories,
-        meta         : data.meta,
-        syncedAt     : Date.now(),
-        deviceUA     : navigator.userAgent.slice(0, 120)
-      };
+    // FIX: Ensure meta and theme are never undefined
+    var safeMeta = data.meta || {};
+    
+    var payload = {
+      transactions : data.transactions || [],
+      categories   : data.categories || [],
+      meta         : {
+        ...safeMeta,
+        theme: safeMeta.theme || 'light' 
+      },
+      syncedAt     : Date.now(),
+      deviceUA     : navigator.userAgent.slice(0, 120)
+    };
 
-      var docRef = doc(db, 'users', currentUser.uid, 'data', 'app_state');
-      await setDoc(docRef, payload);
+    const userDoc = doc(db, 'users', currentUser.uid, 'data', 'app_state');
+    await setDoc(userDoc, payload);
 
-      /* Update last-sync display */
-      var now = new Date().toLocaleString();
-      var el  = document.getElementById('clLastSyncTime');
-      if (el) el.textContent = 'Last synced: ' + now;
-      localStorage.setItem('_cl_last_sync', now);
+    setSyncStatus('synced');
+    console.log('[CoinLence Firebase] Sync success');
 
-      setSyncStatus('synced');
-    } catch (err) {
-      setSyncStatus('error');
-      console.error('[CoinLence Firebase] Sync error:', err);
-      throw err;
-    } finally {
-      isSyncing = false;
-      if (pendingSync) {
-        pendingSync = false;
-        setTimeout(function () {
-          doSyncToFirebase().catch(console.warn);
-        }, 2000);
-      }
+  } catch (err) {
+    console.error('[CoinLence Firebase] Sync error:', err);
+    setSyncStatus('error');
+    
+    // Fallback for clToast error
+    if (typeof clToast !== 'undefined') {
+      clToast("Sync failed");
+    } else {
+      console.warn("Sync failed notification: clToast is not defined");
+    }
+    
+    throw err;
+  } finally {
+    isSyncing = false;
+    if (pendingSync) {
+      pendingSync = false;
+      doSyncToFirebase();
     }
   }
-
+}
   /* =================================================================
      SECTION F — FIRESTORE RESTORE  (download cloud → local)
      Returns true if data was found and written, false otherwise.
