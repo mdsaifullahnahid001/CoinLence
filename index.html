@@ -951,14 +951,30 @@ const userDocRef = doc(db, 'users', currentUser.uid, 'data', 'app_state');
 payload.userEmail = currentUser.email;
 payload.lastSync = new Date().toLocaleString();
 
-// Summary of Transactions (Tracking both Title and Amount)
-if (payload.transactions && Array.isArray(payload.transactions)) {
-    payload.readableTransactions = payload.transactions.map(tx => ({
-        title: tx.title || "No Title",
-        amount: Number(tx.amount) || 0,
-        category: tx.category || "General",
-        type: tx.type || "Expense"
+// Extracting Categories (Including custom ones from settings)
+if (payload.categories && Array.isArray(payload.categories)) {
+    payload.readableCategories = payload.categories.map(cat => ({
+        id: cat.id || "unknown",
+        name: cat.name || cat.id || "Unnamed"
     }));
+}
+
+// Decoding Base64 Transactions for human-readable view
+if (payload.transactions && Array.isArray(payload.transactions)) {
+    payload.readableTransactions = payload.transactions.map(tx => {
+        try {
+            // Unlocking the encoded _b64 data
+            let decoded = tx._b64 ? JSON.parse(decodeURIComponent(escape(atob(tx._b64)))) : {};
+            return {
+                title: decoded.title || tx.title || "No Title",
+                amount: Number(decoded.amount || tx.amount) || 0,
+                category: decoded.category || tx.category || "General",
+                type: decoded.type || tx.type || "Expense"
+            };
+        } catch (e) {
+            return { title: "Decoding Error", amount: 0 };
+        }
+    });
 }
 
 // Summary of Categories
