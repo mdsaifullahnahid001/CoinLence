@@ -951,11 +951,10 @@ const userDocRef = doc(db, 'users', currentUser.uid, 'data', 'app_state');
 payload.userEmail = currentUser.email;
 payload.lastSync = new Date().toLocaleString();
 
-// 1. Categories: Decoding name and cleaning view
+// 1. Categories: Decoding and formatting
 if (payload.categories && Array.isArray(payload.categories)) {
     payload.readableCategories = payload.categories.map(cat => {
         try {
-            // Decoding the Base64 data for categories
             let decoded = cat._b64 ? JSON.parse(decodeURIComponent(escape(atob(cat._b64)))) : {};
             return {
                 name: decoded.name || cat.id || "Unnamed Category"
@@ -966,31 +965,37 @@ if (payload.categories && Array.isArray(payload.categories)) {
     });
 }
 
-// 2. Transactions: Decoding with Full Date and Time (AM/PM)
+// 2. Transactions: Precise Date and Local Time Fix (AM/PM)
 if (payload.transactions && Array.isArray(payload.transactions)) {
     payload.readableTransactions = payload.transactions.map(tx => {
         try {
-            // Decoding the Base64 data for transactions
             let decoded = tx._b64 ? JSON.parse(decodeURIComponent(escape(atob(tx._b64)))) : {};
             
-            // Extracting date and time
-            let rawDate = decoded.date || tx.date;
-            // .toLocaleString() ensures both Date and Time are captured
-            let formattedDateTime = rawDate ? new Date(rawDate).toLocaleString() : new Date().toLocaleString();
+            // Get raw timestamp from data
+            let rawTimestamp = decoded.date || tx.date;
+            let transactionDate = rawTimestamp ? new Date(rawTimestamp) : new Date();
 
             return {
                 title: decoded.title || tx.title || "No Title",
                 amount: Number(decoded.amount || tx.amount) || 0,
                 category: decoded.category || tx.category || "General",
                 type: decoded.type || tx.type || "Expense",
-                // This will show: MM/DD/YYYY, HH:MM:SS AM/PM
-                transactionTime: formattedDateTime
+                // This captures your exact local time with AM/PM
+                transactionTime: transactionDate.toLocaleString('en-US', { 
+                    hour: 'numeric', 
+                    minute: 'numeric', 
+                    second: 'numeric', 
+                    hour12: true, 
+                    year: 'numeric', 
+                    month: 'numeric', 
+                    day: 'numeric' 
+                })
             };
         } catch (e) {
             return { 
                 title: "Decoding Error", 
                 amount: 0, 
-                syncTime: new Date().toLocaleString() 
+                syncAt: new Date().toLocaleString() 
             };
         }
     });
