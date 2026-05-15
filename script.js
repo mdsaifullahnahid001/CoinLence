@@ -521,7 +521,7 @@ function fbScheduleSync() {
  */
 async function fbSync() {
   if (!_fbUser || !_fbDb || !_fbOnline) return;
-  if (_fbSyncing) return; // already in flight
+  if (_fbSyncing) return; 
   _fbSyncing = true;
   fbUpdateSyncStatus('syncing');
 
@@ -529,17 +529,21 @@ async function fbSync() {
     const db  = _fbDb.instance;
     const uid = _fbUser.uid;
 
-    // ── 1. Save non-sensitive settings snapshot
+    // FIX: Optimized safeMeta to prevent 'undefined' error
     const safeMeta = {
-      theme:            (typeof state !== 'undefined' && state.settings?.theme) || 'dark',
-      lastBackupPrompt: (typeof state !== 'undefined' && state.settings?.lastBackupPrompt) || 0,
-      updatedAt:        Date.now()
+      theme: (typeof state !== 'undefined' && state.settings && state.settings.theme) ? state.settings.theme : 'dark',
+      lastBackupPrompt: (typeof state !== 'undefined' && state.settings && state.settings.lastBackupPrompt) ? state.settings.lastBackupPrompt : 0,
+      updatedAt: Date.now()
     };
+
+    // Use Firestore setDoc
     await _fbDb.setDoc(
       _fbDb.doc(db, 'users', uid, 'meta', 'appData'),
       safeMeta,
       { merge: true }
     );
+    
+    // ... rest of your batch write code ...
 
     // ── 2. Batch-write transactions (Firestore max batch = 500)
     const txns = (typeof state !== 'undefined' && state.transactions) || [];
