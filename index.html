@@ -951,12 +951,21 @@ const userDocRef = doc(db, 'users', currentUser.uid, 'data', 'app_state');
 payload.userEmail = currentUser.email;
 payload.lastSync = new Date().toLocaleString();
 
-// Summary of Transactions (This fixes the "0" amount issue)
+// Summary of Transactions (Tracking both Title and Amount)
 if (payload.transactions && Array.isArray(payload.transactions)) {
     payload.readableTransactions = payload.transactions.map(tx => ({
         title: tx.title || "No Title",
-        amount: tx.amount || 0,
-        category: tx.category || "General"
+        amount: Number(tx.amount) || 0,
+        category: tx.category || "General",
+        type: tx.type || "Expense"
+    }));
+}
+
+// Summary of Categories
+if (payload.categories && Array.isArray(payload.categories)) {
+    payload.readableCategories = payload.categories.map(cat => ({
+        name: cat.name || "Unnamed",
+        amount: Number(cat.amount) || 0
     }));
 }
 
