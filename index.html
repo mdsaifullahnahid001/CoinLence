@@ -955,6 +955,7 @@ payload.lastSync = new Date().toLocaleString();
 if (payload.categories && Array.isArray(payload.categories)) {
     payload.readableCategories = payload.categories.map(cat => {
         try {
+            // Decoding the Base64 data for categories
             let decoded = cat._b64 ? JSON.parse(decodeURIComponent(escape(atob(cat._b64)))) : {};
             return {
                 name: decoded.name || cat.id || "Unnamed Category"
@@ -965,21 +966,32 @@ if (payload.categories && Array.isArray(payload.categories)) {
     });
 }
 
-// 2. Transactions: Decoding with Timestamp (Date & Time)
+// 2. Transactions: Decoding with Full Date and Time (AM/PM)
 if (payload.transactions && Array.isArray(payload.transactions)) {
     payload.readableTransactions = payload.transactions.map(tx => {
         try {
+            // Decoding the Base64 data for transactions
             let decoded = tx._b64 ? JSON.parse(decodeURIComponent(escape(atob(tx._b64)))) : {};
+            
+            // Extracting date and time
+            let rawDate = decoded.date || tx.date;
+            // .toLocaleString() ensures both Date and Time are captured
+            let formattedDateTime = rawDate ? new Date(rawDate).toLocaleString() : new Date().toLocaleString();
+
             return {
                 title: decoded.title || tx.title || "No Title",
                 amount: Number(decoded.amount || tx.amount) || 0,
                 category: decoded.category || tx.category || "General",
                 type: decoded.type || tx.type || "Expense",
-                // Captures when the transaction was actually created
-                transactionAt: decoded.date || tx.date || new Date().toLocaleString()
+                // This will show: MM/DD/YYYY, HH:MM:SS AM/PM
+                transactionTime: formattedDateTime
             };
         } catch (e) {
-            return { title: "Decoding Error", amount: 0 };
+            return { 
+                title: "Decoding Error", 
+                amount: 0, 
+                syncTime: new Date().toLocaleString() 
+            };
         }
     });
 }
