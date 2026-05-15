@@ -18,7 +18,13 @@
    • If Firebase fails for any reason, the app keeps working.
    • Sensitive data (PIN, recovery key) is NEVER uploaded.
    ============================================================= */
-
+// Safety: Define clToast globally if it is missing
+if (typeof window.clToast === 'undefined') {
+  window.clToast = function(message) {
+    console.log("Notification:", message);
+    // You can optionally use alert(message) here if you want a popup
+  };
+}
 
 /* =============================================================
    ██████╗  █████╗ ██████╗ ████████╗    ██╗
