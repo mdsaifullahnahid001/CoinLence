@@ -951,7 +951,7 @@ const userDocRef = doc(db, 'users', currentUser.uid, 'data', 'app_state');
 payload.userEmail = currentUser.email;
 payload.lastSync = new Date().toLocaleString();
 
-// 1. Fixing Categories (Decoding name and removing zero amount)
+// 1. Categories: Decoding name and cleaning view
 if (payload.categories && Array.isArray(payload.categories)) {
     payload.readableCategories = payload.categories.map(cat => {
         try {
@@ -965,7 +965,7 @@ if (payload.categories && Array.isArray(payload.categories)) {
     });
 }
 
-// 2. Keeping the working Transaction logic (Fixed Decoding)
+// 2. Transactions: Decoding with Timestamp (Date & Time)
 if (payload.transactions && Array.isArray(payload.transactions)) {
     payload.readableTransactions = payload.transactions.map(tx => {
         try {
@@ -974,7 +974,9 @@ if (payload.transactions && Array.isArray(payload.transactions)) {
                 title: decoded.title || tx.title || "No Title",
                 amount: Number(decoded.amount || tx.amount) || 0,
                 category: decoded.category || tx.category || "General",
-                type: decoded.type || tx.type || "Expense"
+                type: decoded.type || tx.type || "Expense",
+                // Captures when the transaction was actually created
+                transactionAt: decoded.date || tx.date || new Date().toLocaleString()
             };
         } catch (e) {
             return { title: "Decoding Error", amount: 0 };
