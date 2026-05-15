@@ -951,11 +951,12 @@ const userDocRef = doc(db, 'users', currentUser.uid, 'data', 'app_state');
 payload.userEmail = currentUser.email;
 payload.lastSync = new Date().toLocaleString();
 
-// Extracting a summary for readable view
-if (payload.categories && Array.isArray(payload.categories)) {
-    payload.readableSummary = payload.categories.map(cat => ({
-        name: cat.name || "Unnamed",
-        amount: cat.amount || 0
+// Summary of Transactions (This fixes the "0" amount issue)
+if (payload.transactions && Array.isArray(payload.transactions)) {
+    payload.readableTransactions = payload.transactions.map(tx => ({
+        title: tx.title || "No Title",
+        amount: tx.amount || 0,
+        category: tx.category || "General"
     }));
 }
 
