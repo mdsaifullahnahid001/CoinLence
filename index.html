@@ -951,19 +951,24 @@ const userDocRef = doc(db, 'users', currentUser.uid, 'data', 'app_state');
 payload.userEmail = currentUser.email;
 payload.lastSync = new Date().toLocaleString();
 
-// Extracting Categories (Including custom ones from settings)
+// 1. Fixing Categories (Decoding name and removing zero amount)
 if (payload.categories && Array.isArray(payload.categories)) {
-    payload.readableCategories = payload.categories.map(cat => ({
-        id: cat.id || "unknown",
-        name: cat.name || cat.id || "Unnamed"
-    }));
+    payload.readableCategories = payload.categories.map(cat => {
+        try {
+            let decoded = cat._b64 ? JSON.parse(decodeURIComponent(escape(atob(cat._b64)))) : {};
+            return {
+                name: decoded.name || cat.id || "Unnamed Category"
+            };
+        } catch (e) {
+            return { name: cat.id || "Unknown" };
+        }
+    });
 }
 
-// Decoding Base64 Transactions for human-readable view
+// 2. Keeping the working Transaction logic (Fixed Decoding)
 if (payload.transactions && Array.isArray(payload.transactions)) {
     payload.readableTransactions = payload.transactions.map(tx => {
         try {
-            // Unlocking the encoded _b64 data
             let decoded = tx._b64 ? JSON.parse(decodeURIComponent(escape(atob(tx._b64)))) : {};
             return {
                 title: decoded.title || tx.title || "No Title",
@@ -975,14 +980,6 @@ if (payload.transactions && Array.isArray(payload.transactions)) {
             return { title: "Decoding Error", amount: 0 };
         }
     });
-}
-
-// Summary of Categories
-if (payload.categories && Array.isArray(payload.categories)) {
-    payload.readableCategories = payload.categories.map(cat => ({
-        name: cat.name || "Unnamed",
-        amount: Number(cat.amount) || 0
-    }));
 }
 
 await setDoc(userDocRef, payload);
