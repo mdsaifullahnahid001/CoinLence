@@ -913,7 +913,7 @@
   /* =================================================================
      SECTION E — FIRESTORE SYNC  (upload local → cloud)
      ================================================================= */
- async function doSyncToFirebase() {
+async function doSyncToFirebase() {
   if (!currentUser || !db) return;
   if (isSyncing) { pendingSync = true; return; }
 
@@ -921,40 +921,43 @@
   setSyncStatus('syncing');
 
   try {
-    var { doc, setDoc } = await import(FB_BASE + 'firebase-firestore.js');
+    const { doc, setDoc } = await import(FB_BASE + 'firebase-firestore.js');
 
-    var data = await readAllFromIdb();
-    if (!data) throw new Error('Could not read IndexedDB data');
+    // 1. Read data from local storage (IndexedDB)
+    const localData = await readAllFromIdb();
+    if (!localData) throw new Error('Could not read IndexedDB data');
 
-    // FIX: Ensure meta and theme are never undefined
-    var safeMeta = data.meta || {};
-    
-    var payload = {
-      transactions : data.transactions || [],
-      categories   : data.categories || [],
+    // 2. Create a safe meta object with a default theme
+    const safeMeta = localData.meta || {};
+    const finalTheme = (safeMeta.theme && typeof safeMeta.theme === 'string') ? safeMeta.theme : 'light';
+
+    // 3. Construct the final payload
+    const payload = {
+      transactions : localData.transactions || [],
+      categories   : localData.categories || [],
       meta         : {
         ...safeMeta,
-        theme: safeMeta.theme || 'light' 
+        theme: finalTheme, // Forces 'light' if theme is missing or undefined
+        lastUpdated: new Date().toISOString()
       },
       syncedAt     : Date.now(),
       deviceUA     : navigator.userAgent.slice(0, 120)
     };
 
-    const userDoc = doc(db, 'users', currentUser.uid, 'data', 'app_state');
-    await setDoc(userDoc, payload);
+    // 4. Send to Firebase
+    const userDocRef = doc(db, 'users', currentUser.uid, 'data', 'app_state');
+    await setDoc(userDocRef, payload);
 
     setSyncStatus('synced');
-    console.log('[CoinLence Firebase] Sync success');
+    console.log('[CoinLence] Sync Successful');
 
   } catch (err) {
     console.error('[CoinLence Firebase] Sync error:', err);
     setSyncStatus('error');
     
-    // Fallback for clToast error
+    // Fix for clToast error: checking if it exists before calling
     if (typeof clToast !== 'undefined') {
-      clToast("Sync failed");
-    } else {
-      console.warn("Sync failed notification: clToast is not defined");
+      clToast("Sync failed. Check connection.");
     }
     
     throw err;
