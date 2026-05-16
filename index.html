@@ -1447,7 +1447,11 @@ service cloud.firestore {
 <script src="script.js"></script>
 <script>
 if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('sw.js');
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./service-worker.js')
+      .then(reg => console.log('Service Worker Registered'))
+      .catch(err => console.log(err));
+  });
 }
 </script>
 </body>
