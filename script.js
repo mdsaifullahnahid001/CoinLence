@@ -107,8 +107,8 @@ async function fbLoad() {
       getDocs,
       collection,
       writeBatch,
-      serverTimestamp
-      enableIndexedDbPersistence
+      serverTimestamp,
+      enableIndexedDbPersistence,
     } = await import(
       'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js'
     );
