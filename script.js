@@ -108,6 +108,7 @@ async function fbLoad() {
       collection,
       writeBatch,
       serverTimestamp
+      enableIndexedDbPersistence
     } = await import(
       'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js'
     );
@@ -134,7 +135,15 @@ async function fbLoad() {
     _fbDb = {
       instance: getFirestore(_fbApp),
       doc, setDoc, getDoc, getDocs, collection, writeBatch, serverTimestamp
-    };
+    }; 
+     enableIndexedDbPersistence(_fbDb.instance)
+  .catch((err) => {
+      if (err.code == 'failed-precondition') {
+          console.log('Persistence failed: Multiple tabs open');
+      } else if (err.code == 'unimplemented') {
+          console.log('Persistence is not available in this browser');
+      }
+  });
 
     // ── Watch auth state (fires immediately on load if session exists)
     _fbAuth.onAuthStateChanged(_fbAuth.instance, async (user) => {
