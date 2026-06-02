@@ -6,8 +6,6 @@ const PRECACHE_URLS = [
   './style.css',
   './script.js',
   './manifest.json',
-  'https://via.placeholder.com/192',
-  'https://via.placeholder.com/512'
 ];
 
 self.addEventListener('install', (event) => {
