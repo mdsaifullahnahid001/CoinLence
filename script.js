@@ -131,20 +131,25 @@ async function fbLoad() {
       onAuthStateChanged
     };
 
-    // ── Bundle Firestore helpers
+ // ── Bundle Firestore helpers
     _fbDb = {
       instance: getFirestore(_fbApp),
       doc, setDoc, getDoc, getDocs, collection, writeBatch, serverTimestamp
-    }; 
-   enableIndexedDbPersistence(_fbDb.instance, {
-      forceOwnership: true 
-    }).catch((err) => {
-        if (err.code == 'failed-precondition') {
-            console.warn("Persistence failed: Multiple tabs are open.");
-        } else if (err.code == 'unimplemented') {
-            console.warn("Persistence not supported by this browser.");
-        }
-    });
+    };
+
+    // Correctly enable persistence
+    try {
+      await enableIndexedDbPersistence(_fbDb.instance, {
+        forceOwnership: true
+      });
+      console.log("Firestore persistence enabled successfully.");
+    } catch (err) {
+      if (err.code === 'failed-precondition') {
+        console.warn("Persistence failed: Multiple tabs are open.");
+      } else if (err.code === 'unimplemented') {
+        console.warn("Persistence not supported by this browser.");
+      }
+    }
 
     // ── Watch auth state (fires immediately on load if session exists)
     _fbAuth.onAuthStateChanged(_fbAuth.instance, async (user) => {
