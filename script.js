@@ -136,14 +136,15 @@ async function fbLoad() {
       instance: getFirestore(_fbApp),
       doc, setDoc, getDoc, getDocs, collection, writeBatch, serverTimestamp
     }; 
-     enableIndexedDbPersistence(_fbDb.instance)
-  .catch((err) => {
-      if (err.code == 'failed-precondition') {
-          console.log('Persistence failed: Multiple tabs open');
-      } else if (err.code == 'unimplemented') {
-          console.log('Persistence is not available in this browser');
-      }
-  });
+   enableIndexedDbPersistence(_fbDb.instance, {
+      forceOwnership: true 
+    }).catch((err) => {
+        if (err.code == 'failed-precondition') {
+            console.warn("Persistence failed: Multiple tabs are open.");
+        } else if (err.code == 'unimplemented') {
+            console.warn("Persistence not supported by this browser.");
+        }
+    });
 
     // ── Watch auth state (fires immediately on load if session exists)
     _fbAuth.onAuthStateChanged(_fbAuth.instance, async (user) => {
