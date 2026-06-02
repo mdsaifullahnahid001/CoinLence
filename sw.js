@@ -71,7 +71,6 @@ self.addEventListener('fetch', (event) => {
           return res;
         })
           return new Response('', { status: 504, statusText: 'Offline' });
-        });
     })
   );
 });
