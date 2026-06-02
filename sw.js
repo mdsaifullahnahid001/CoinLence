@@ -70,10 +70,6 @@ self.addEventListener('fetch', (event) => {
           caches.open(CACHE_VERSION).then((c) => c.put(req, copy)).catch(()=>{});
           return res;
         })
-        .catch(() => {
-          if (req.destination === 'image') {
-            return caches.match('https://via.placeholder.com/192');
-          }
           return new Response('', { status: 504, statusText: 'Offline' });
         });
     })
