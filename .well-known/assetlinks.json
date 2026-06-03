@@ -1,14 +1,8 @@
-[
-  {
-    "relation": [
-      "delegate_permission/common.handle_all_urls"
-    ],
-    "target": {
-      "namespace": "android_app",
-      "package_name": "io.github.mdsaifullahnahid001.twa",
-      "sha256_cert_fingerprints": [
-        "C3:93:18:2A:70:E6:DD:FC:3A:AB:68:CD:0A:04:23:93:44:C2:0C:03:6F:4C:47:29:B7:4F:82:5A:C5:E6:20:3F"
-      ]
-    }
-  }
-]
+[{
+      "relation": ["delegate_permission/common.handle_all_urls"],
+      "target": {
+        "namespace": "android_app",
+        "package_name": "app.web.project_a1a39c5f_2b89_47f9_ba2.twa",
+        "sha256_cert_fingerprints": ["FF:6B:39:A9:EA:35:2E:3A:97:28:9A:95:59:51:AB:BE:49:61:C7:7B:51:20:98:3E:6D:9C:40:F4:74:97:F1:FC"]
+      }
+    }]
