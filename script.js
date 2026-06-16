@@ -1027,6 +1027,9 @@ async function loadCategories() {
     }
   }
   state.categories = cats.sort((a,b) => a.name.localeCompare(b.name));
+  
+  // Refresh the dropdown after loading
+  populateCategoryFilter();
 }
 
 async function addCategory(name) {
@@ -1039,11 +1042,31 @@ async function addCategory(name) {
   await dbPut(STORES.CATS, c);
   state.categories.push(c);
   state.categories.sort((a,b) => a.name.localeCompare(b.name));
+  
+  // Refresh the dropdown after adding
+  populateCategoryFilter();
 }
 
 async function deleteCategory(id) {
   await dbDelete(STORES.CATS, id);
   state.categories = state.categories.filter(c => c.id !== id);
+  
+  // Refresh the dropdown after deleting
+  populateCategoryFilter();
+}
+
+function populateCategoryFilter() {
+  const categoryFilter = document.getElementById('categoryFilter');
+  if (!categoryFilter) return;
+
+  categoryFilter.innerHTML = '<option value="All">All Categories</option>';
+
+  state.categories.forEach(cat => {
+    const option = document.createElement('option');
+    option.value = cat.name;
+    option.text = cat.name;
+    categoryFilter.appendChild(option);
+  });
 }
 
 /* ===========================================================
@@ -1523,7 +1546,6 @@ function populateMonthYearFilters() {
     fm.appendChild(o);
   }
 
-  // years from transactions + current
   const years = new Set();
   years.add(new Date().getFullYear());
   state.transactions.forEach(t => years.add(parseInt(t.date.slice(0,4),10)));
@@ -1537,7 +1559,7 @@ function populateMonthYearFilters() {
   });
 }
 
-['searchInput','filterType','filterMonth','filterYear'].forEach(id => {
+['searchInput','filterType','filterMonth','filterYear','categoryFilter'].forEach(id => {
   document.addEventListener('input', e => { if (e.target.id === id) renderHistory(); });
   document.addEventListener('change', e => { if (e.target.id === id) renderHistory(); });
 });
@@ -1547,11 +1569,15 @@ function renderHistory() {
   const type = $('#filterType')?.value || 'all';
   const month = $('#filterMonth')?.value || 'all';
   const year = $('#filterYear')?.value || 'all';
+  const category = $('#categoryFilter')?.value || 'All';
 
   let list = state.transactions.slice();
   if (type !== 'all') list = list.filter(t => t.type === type);
   if (year !== 'all') list = list.filter(t => t.date.startsWith(year));
   if (month !== 'all') list = list.filter(t => t.date.slice(5,7) === month);
+  
+  if (category !== 'All') list = list.filter(t => t.category === category);
+
   if (q) list = list.filter(t =>
     t.title.toLowerCase().includes(q) ||
     (t.category||'').toLowerCase().includes(q) ||
@@ -2213,7 +2239,12 @@ async function init() {
 
 document.addEventListener('DOMContentLoaded', init);
 
-})();
+})();  
+
+// Add event listener to trigger filtering when category changes
+document.getElementById('categoryFilter').addEventListener('change', () => {
+  renderTransactions(); // This function should re-display the list based on filters
+});
 
 /* =============================================================
    FIRESTORE SECURITY RULES
