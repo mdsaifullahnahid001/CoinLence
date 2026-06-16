@@ -1054,20 +1054,18 @@ async function deleteCategory(id) {
   // Refresh the dropdown after deleting
   populateCategoryFilter();
 }
-
 function populateCategoryFilter() {
-  const categoryFilter = document.getElementById('categoryFilter');
-  if (!categoryFilter) return;
-
-  categoryFilter.innerHTML = '<option value="All">All Categories</option>';
-
+  const cf = document.getElementById('categoryFilter');
+  if (!cf) return;
+  cf.innerHTML = '<option value="All">All Categories</option>';
   state.categories.forEach(cat => {
-    const option = document.createElement('option');
-    option.value = cat.name;
-    option.text = cat.name;
-    categoryFilter.appendChild(option);
+    const o = document.createElement('option');
+    o.value = cat.name;
+    o.textContent = cat.name;
+    cf.appendChild(o);
   });
 }
+
 
 /* ===========================================================
    TRANSACTIONS
@@ -1558,11 +1556,11 @@ function populateMonthYearFilters() {
     fy.appendChild(o);
   });
 }
-
 ['searchInput','filterType','filterMonth','filterYear','categoryFilter'].forEach(id => {
   document.addEventListener('input', e => { if (e.target.id === id) renderHistory(); });
   document.addEventListener('change', e => { if (e.target.id === id) renderHistory(); });
 });
+
 
 function renderHistory() {
   const q = ($('#searchInput')?.value || '').toLowerCase().trim();
